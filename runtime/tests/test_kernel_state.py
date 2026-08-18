@@ -21,6 +21,12 @@ def user(text):
     return {"type": "user", "message": {"role": "user", "content": text}}
 
 
+def meta(text):
+    """Hook feedback: injected as a user-role record but flagged isMeta."""
+    return {"type": "user", "isMeta": True,
+            "message": {"role": "user", "content": text}}
+
+
 def tool_use(name, **inp):
     return {"type": "tool_use", "name": name, "input": inp}
 
@@ -137,6 +143,16 @@ class TestKernelState(unittest.TestCase):
     def test_skill_name_records_which_skill_activated(self):
         p = transcript([asst(tool_use("Skill", skill="dopa-kernel"))])
         self.assertEqual(kernel_state.parse(p).skill_name, "dopa-kernel")
+
+    def test_hook_feedback_is_not_counted_as_a_user_turn(self):
+        p = transcript([
+            user("real request"),
+            meta("Stop hook feedback:\n[gate_stop.py]: K5 not satisfied"),
+            asst(text_block("continuing")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertEqual(st.user_turns, [0])
+        self.assertEqual(st.last_user_at, 0)
 
     def test_all_reads_of_a_module_are_retained(self):
         p = transcript([

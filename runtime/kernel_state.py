@@ -65,7 +65,11 @@ def parse(path: str) -> KernelState:
         message = record.get("message") or {}
         role = message.get("role")
         content = message.get("content")
-        if role == "user" and isinstance(content, str):
+        # Hook feedback is injected as a user-role record but flagged isMeta.
+        # Counting it as a turn would let a Stop block inflate the very
+        # denominator the gate is measured against, and would make a prior
+        # completion read look stale to gate_stop.decide().
+        if role == "user" and isinstance(content, str) and not record.get("isMeta"):
             state.last_user_at = idx
             state.user_turns.append(idx)
         if not isinstance(content, list):
