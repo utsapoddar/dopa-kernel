@@ -8,9 +8,10 @@ its answer by parsing it.
 |---|---|
 | `kernel_state.py` | Parse a transcript into activation, module reads, and emitted cell/expect lines |
 | `dictionary.py` | The 18-cell frame: legality, Pareto partial order, regression floor |
+| `bash_effect.py` | Classifies a shell command as read_only / writing / destructive |
 | `pacing.py` | `Rbar` and `tau* = sqrt(C_v/Rbar)` (Niv et al. 2007, Eq. 4) |
-| `gate_pretooluse.py` | Blocks mutations missing adapter / rollback / proposal |
-| `gate_stop.py` | Blocks turn-end missing the completion walk |
+| `gate_pretooluse.py` | Blocks mutations and destructive shell missing adapter / rollback / proposal |
+| `gate_stop.py` | Blocks turn-end missing the completion walk, on turns that did work |
 | `compliance.py` | Passive scan of existing transcripts: how often each routing rule was followed, over opportunities only |
 
 Guarantees: inert unless the transcript shows `Skill(dopa-kernel)`; fails open

@@ -15,6 +15,8 @@ def state(**kw):
     st.mutations = kw.pop("mutations", [])
     st.last_user_at = kw.pop("last_user_at", 0)
     st.user_turns = kw.pop("user_turns", [st.last_user_at])
+    st.bash_ops = kw.pop("bash_ops", [])
+    st.substantive_ops = kw.pop("substantive_ops", [st.last_user_at + 1])
     return st
 
 
@@ -60,6 +62,26 @@ class TestAssess(unittest.TestCase):
                    mutations=[(5, "Write", REAL)])
         self.assertFalse(compliance.assess(st)["rollback"]["compliant"])
 
+    def test_destructive_bash_creates_a_rollback_opportunity(self):
+        st = state(modules_read={"combined.md": 1}, bash_ops=[(6, "destructive")])
+        r = compliance.assess(st)
+        self.assertTrue(r["rollback"]["opportunity"])
+        self.assertFalse(r["rollback"]["compliant"])
+
+    def test_destructive_bash_with_prior_rollback_is_compliant(self):
+        st = state(modules_read={"combined.md": 1, "rollback.md": 4},
+                   bash_ops=[(6, "destructive")])
+        self.assertTrue(compliance.assess(st)["rollback"]["compliant"])
+
+    def test_writing_bash_alone_is_no_rollback_opportunity(self):
+        st = state(modules_read={"combined.md": 1}, bash_ops=[(6, "writing")])
+        self.assertFalse(compliance.assess(st)["rollback"]["opportunity"])
+
+    def test_turns_without_work_are_not_completion_opportunities(self):
+        st = state(modules_read={}, user_turns=[2, 10], substantive_ops=[11])
+        r = compliance.assess(st)
+        self.assertEqual(r["completion"]["turns"], 1)
+
     def test_proposal_has_no_opportunity_without_outside_declaration(self):
         st = state(modules_read={"combined.md": 1}, cells=[(2, "C", "inside")])
         self.assertFalse(compliance.assess(st)["proposal"]["opportunity"])
@@ -81,14 +103,16 @@ class TestAssess(unittest.TestCase):
         self.assertFalse(r["completion"]["compliant"])
 
     def test_completion_counts_each_turn_separately(self):
-        st = state(modules_read={"completion.md": 3}, user_turns=[2, 10])
+        st = state(modules_read={"completion.md": 3}, user_turns=[2, 10],
+                   substantive_ops=[4, 11])
         st.all_module_reads = {"completion.md": [3]}
         r = compliance.assess(st)
         self.assertEqual((r["completion"]["turns"], r["completion"]["gated"]), (2, 1))
         self.assertFalse(r["completion"]["compliant"])
 
     def test_completion_compliant_when_every_turn_gates(self):
-        st = state(modules_read={"completion.md": 12}, user_turns=[2, 10])
+        st = state(modules_read={"completion.md": 12}, user_turns=[2, 10],
+                   substantive_ops=[4, 11])
         st.all_module_reads = {"completion.md": [3, 12]}
         self.assertTrue(compliance.assess(st)["completion"]["compliant"])
 

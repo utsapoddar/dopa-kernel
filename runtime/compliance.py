@@ -28,8 +28,11 @@ def assess(state) -> dict:
     if not state.active:
         return {}
     first_mutation = state.first_mutation_at()
-    real = [m for m in state.mutations if not is_scratch(m[2])]
-    first_real = real[0][0] if real else None
+    real = [m[0] for m in state.mutations if not is_scratch(m[2])]
+    destructive = state.first_destructive_at()
+    if destructive is not None:
+        real.append(destructive)
+    first_real = min(real) if real else None
     outside = [idx for idx, axis, value in state.cells
                if axis == "C" and value == "outside"]
 
@@ -72,13 +75,19 @@ def _completion_per_turn(state) -> dict:
     turn would mark a session that gated ten times as a single miss."""
     turns = state.user_turns or [0]
     all_reads = state.all_module_reads.get("completion.md", [])
-    gated = 0
+    gated = counted = 0
     for i, start in enumerate(turns):
         end = turns[i + 1] if i + 1 < len(turns) else float("inf")
+        # a turn with no substantive work has nothing to verify; the gate does
+        # not fire on it, so it must not count against the rate either
+        if not any(start <= op < end for op in state.substantive_ops):
+            continue
+        counted += 1
         if any(start <= r < end for r in all_reads):
             gated += 1
-    return {"opportunity": True, "turns": len(turns), "gated": gated,
-            "compliant": gated == len(turns)}
+    turns = [t for t in turns][:counted] or []
+    return {"opportunity": counted > 0, "turns": counted, "gated": gated,
+            "compliant": counted == 0 or gated == counted}
 
 
 def aggregate(rows: list[dict]) -> dict:
@@ -148,11 +157,13 @@ def _render(report: dict) -> str:
     lines += [
         "",
         "coverage limits — read these before trusting the rates:",
-        "  * state changes made through Bash (git, rm, shell redirects) are NOT",
-        "    counted as mutations, so `rollback` under-reports opportunities.",
+        "  * Bash is classified heuristically. Only *destructive* commands",
+        "    (rm, push, reset --hard, gh -X DELETE, ...) create a rollback",
+        "    opportunity; recoverable shell writes are deliberately not gated.",
         "  * `proposal` only has an opportunity when a session emits",
         "    `cell[C]: outside`; an undeclared excursion is invisible here.",
-        "  * `completion` counts every turn-end as an opportunity.",
+        "  * `completion` counts only turns that did substantive work; pure",
+        "    routing or conversational turns are not opportunities.",
     ]
     return "\n".join(lines)
 

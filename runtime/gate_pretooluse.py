@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bash_effect  # noqa: E402
 import kernel_state  # noqa: E402
 
 MUTATORS = set(kernel_state.MUTATORS)
@@ -22,14 +23,26 @@ def is_scratch(path: str) -> bool:
 
 
 def decide(state, tool_name: str, tool_input: dict) -> str | None:
-    """Return a blocking reason, or None to allow."""
-    if not state.active or tool_name not in MUTATORS:
+    """Return a blocking reason, or None to allow.
+
+    Bash is gated only when the command is *destructive*. Writing-level shell
+    (notes, mkdir, git add) is left alone deliberately: the process channel is
+    written constantly, and gating it would make the kernel unusable. The cost
+    is that a recoverable Bash write to a real path is not covered.
+    """
+    if not state.active:
+        return None
+    is_bash = tool_name == "Bash"
+    if not is_bash and tool_name not in MUTATORS:
+        return None
+    if is_bash and not bash_effect.is_destructive(tool_input.get("command")):
         return None
     if state.domain_adapter() is None:
         return ("K2 not satisfied: no domain adapter invoked. Read exactly one of "
                 "modules/{artifact,decision,execution,combined}.md before working.")
     target = str(tool_input.get("file_path") or "")
-    if not is_scratch(target) and "rollback.md" not in state.modules_read:
+    needs_rollback = is_bash or not is_scratch(target)
+    if needs_rollback and "rollback.md" not in state.modules_read:
         return ("K4 not satisfied: persistent state change without a prepared rollback. "
                 "Read modules/rollback.md, capture prior state, then act.")
     if state.latest_envelope_class() == "outside" and "proposal.md" not in state.modules_read:

@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import bash_effect
+
 SKILL_NAME = "dopa-kernel"
 ADAPTERS = ("artifact.md", "decision.md", "execution.md", "combined.md")
 MUTATORS = ("Write", "Edit", "NotebookEdit")
@@ -29,6 +31,8 @@ class KernelState:
     cells: list[tuple[int, str, str]] = field(default_factory=list)
     expects: list[tuple[int, str, str]] = field(default_factory=list)
     mutations: list[tuple[int, str, str]] = field(default_factory=list)
+    bash_ops: list[tuple[int, str]] = field(default_factory=list)
+    substantive_ops: list[int] = field(default_factory=list)
     last_user_at: int = -1
     user_turns: list[int] = field(default_factory=list)
     records: int = 0
@@ -39,6 +43,16 @@ class KernelState:
 
     def first_mutation_at(self) -> int | None:
         return self.mutations[0][0] if self.mutations else None
+
+    def substantive_since(self, index: int) -> bool:
+        """Did any non-bookkeeping tool call happen at or after `index`?"""
+        return any(i >= index for i in self.substantive_ops)
+
+    def first_destructive_at(self) -> int | None:
+        for idx, effect in self.bash_ops:
+            if effect == "destructive":
+                return idx
+        return None
 
     def latest_envelope_class(self) -> str | None:
         for _idx, axis, value in reversed(self.cells):
@@ -87,15 +101,22 @@ def parse(path: str) -> KernelState:
 
 def _scan_tool_use(state: KernelState, idx: int, block: dict) -> None:
     inp = block.get("input") or {}
-    name = block.get("name")
-    if name == "Skill" and inp.get("skill") == SKILL_NAME:
+    tool = block.get("name")
+
+    if tool == "Skill" and inp.get("skill") == SKILL_NAME:
         state.active = True
         if state.activated_at is None:
             state.activated_at = idx
             state.skill_name = SKILL_NAME
         return
-    if name in MUTATORS:
-        state.mutations.append((idx, name, str(inp.get("file_path") or "")))
+
+    if tool in MUTATORS:
+        state.mutations.append((idx, tool, str(inp.get("file_path") or "")))
+
+    effect = bash_effect.classify(inp.get("command")) if tool == "Bash" else None
+    if effect and effect != "read_only":
+        state.bash_ops.append((idx, effect))
+
     # K6 sends process records to a notes file rather than the reply, so a cell
     # placement usually arrives as written content, not as assistant text.
     # Scanning only text would make correct behaviour invisible to the gates.
@@ -103,12 +124,19 @@ def _scan_tool_use(state: KernelState, idx: int, block: dict) -> None:
         written = inp.get(field_name)
         if isinstance(written, str) and "cell[" in written:
             _scan_text(state, idx, written)
+
     blob = str(inp.get("file_path") or inp.get("command") or "")
     match = _MODULE_RE.search(blob)
     if match:
-        name = match.group(1)
-        state.modules_read[name] = idx
-        state.all_module_reads.setdefault(name, []).append(idx)
+        module = match.group(1)
+        state.modules_read[module] = idx
+        state.all_module_reads.setdefault(module, []).append(idx)
+
+    # Routing (invoking the skill, reading its modules) is bookkeeping, not work.
+    # A turn that only routes has nothing to verify, so it must not be gated.
+    bookkeeping = bool(match) and effect in (None, "read_only")
+    if not bookkeeping:
+        state.substantive_ops.append(idx)
 
 
 def _scan_text(state: KernelState, idx: int, text: str) -> None:

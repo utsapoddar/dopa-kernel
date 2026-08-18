@@ -25,8 +25,15 @@ REASON = ("K5 not satisfied: the completion gate has not run this turn. Read "
 
 
 def decide(state) -> str | None:
-    """Return a blocking reason, or None to allow the stop."""
+    """Return a blocking reason, or None to allow the stop.
+
+    Only turns that did substantive work are gated. Gating a turn that merely
+    invoked the skill or answered a question produces noise with nothing to
+    verify, which is the fastest way to make the kernel not worth running.
+    """
     if not state.active:
+        return None
+    if not state.substantive_since(state.last_user_at):
         return None
     read_at = state.modules_read.get("completion.md")
     if read_at is None or read_at < state.last_user_at:

@@ -13,6 +13,11 @@ def state(**kw):
     return st
 
 
+BASH_DESTRUCTIVE = {"command": "git push origin main"}
+BASH_WRITING = {"command": "echo x > /tmp/z/scratchpad/notes.md"}
+BASH_READ = {"command": "git status"}
+
+
 REAL = {"file_path": "/Users/x/projects/app/main.py"}
 SCRATCH = {"file_path": "/private/tmp/claude-501/xyz/scratchpad/note.md"}
 FULL = {"combined.md": 1, "rollback.md": 2}
@@ -63,6 +68,32 @@ class TestPreToolUseGate(unittest.TestCase):
     def test_edit_is_gated_like_write(self):
         reason = gate.decide(state(modules_read={}), "Edit", REAL)
         self.assertIn("K2", reason)
+
+    def test_destructive_bash_without_rollback_is_blocked(self):
+        st = state(modules_read={"combined.md": 1})
+        reason = gate.decide(st, "Bash", BASH_DESTRUCTIVE)
+        self.assertIsNotNone(reason)
+        self.assertIn("K4", reason)
+
+    def test_destructive_bash_with_rollback_is_allowed(self):
+        st = state(modules_read={"combined.md": 1, "rollback.md": 2})
+        self.assertIsNone(gate.decide(st, "Bash", BASH_DESTRUCTIVE))
+
+    def test_writing_bash_is_not_gated(self):
+        st = state(modules_read={"combined.md": 1})
+        self.assertIsNone(gate.decide(st, "Bash", BASH_WRITING))
+
+    def test_read_only_bash_is_not_gated(self):
+        st = state(modules_read={"combined.md": 1})
+        self.assertIsNone(gate.decide(st, "Bash", BASH_READ))
+
+    def test_destructive_bash_still_needs_an_adapter(self):
+        reason = gate.decide(state(modules_read={}), "Bash", BASH_DESTRUCTIVE)
+        self.assertIn("K2", reason)
+
+    def test_bash_is_inert_when_kernel_inactive(self):
+        st = state(active=False, modules_read={})
+        self.assertIsNone(gate.decide(st, "Bash", BASH_DESTRUCTIVE))
 
     def test_scratch_detection(self):
         self.assertTrue(gate.is_scratch("/tmp/foo"))

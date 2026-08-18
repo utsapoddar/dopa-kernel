@@ -6,10 +6,12 @@ import gate_stop
 from kernel_state import KernelState
 
 
-def state(active=True, modules_read=None, last_user_at=0):
+def state(active=True, modules_read=None, last_user_at=0, substantive=True):
     st = KernelState(active=active)
     st.modules_read = modules_read or {}
     st.last_user_at = last_user_at
+    # by default the turn did real work, so the gate applies
+    st.substantive_ops = [last_user_at + 1] if substantive else []
     return st
 
 
@@ -32,6 +34,20 @@ class TestStopGate(unittest.TestCase):
 
     def test_completion_read_after_last_user_turn_allows_stop(self):
         st = state(modules_read={"completion.md": 12}, last_user_at=10)
+        self.assertIsNone(gate_stop.decide(st))
+
+    def test_turn_with_no_substantive_work_is_not_gated(self):
+        """A pure routing or conversational turn has nothing to verify."""
+        st = state(modules_read={"combined.md": 1}, substantive=False)
+        self.assertIsNone(gate_stop.decide(st))
+
+    def test_turn_with_work_is_still_gated(self):
+        st = state(modules_read={"combined.md": 1}, substantive=True)
+        self.assertIsNotNone(gate_stop.decide(st))
+
+    def test_work_in_an_earlier_turn_does_not_gate_this_one(self):
+        st = state(modules_read={"combined.md": 1}, last_user_at=50, substantive=False)
+        st.substantive_ops = [3]
         self.assertIsNone(gate_stop.decide(st))
 
     def test_block_count_starts_at_zero(self):

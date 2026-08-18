@@ -144,6 +144,52 @@ class TestKernelState(unittest.TestCase):
         p = transcript([asst(tool_use("Skill", skill="dopa-kernel"))])
         self.assertEqual(kernel_state.parse(p).skill_name, "dopa-kernel")
 
+    def test_kernel_bookkeeping_is_not_substantive_work(self):
+        """Invoking the skill and reading its own modules is routing, not work."""
+        p = transcript([
+            asst(tool_use("Skill", skill="dopa-kernel")),
+            asst(tool_use("Read", file_path=SKILL + "artifact.md")),
+        ])
+        self.assertEqual(kernel_state.parse(p).substantive_ops, [])
+
+    def test_real_tool_use_is_substantive(self):
+        p = transcript([
+            asst(tool_use("Skill", skill="dopa-kernel")),
+            asst(tool_use("Bash", command="gh api user")),
+            asst(tool_use("Write", file_path="/a.py")),
+        ])
+        self.assertEqual(kernel_state.parse(p).substantive_ops, [1, 2])
+
+    def test_substantive_since_reports_work_after_an_index(self):
+        p = transcript([
+            asst(tool_use("Bash", command="ls")),
+            user("go"),
+            asst(tool_use("Bash", command="ls -la")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertTrue(st.substantive_since(1))
+        self.assertFalse(st.substantive_since(99))
+
+    def test_bash_state_changes_are_recorded_with_their_effect(self):
+        p = transcript([
+            asst(tool_use("Bash", command="ls -la")),
+            asst(tool_use("Bash", command="echo x > f.txt")),
+            asst(tool_use("Bash", command="git push origin main")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertEqual(st.bash_ops, [(1, "writing"), (2, "destructive")])
+
+    def test_first_destructive_bash_at(self):
+        p = transcript([
+            asst(tool_use("Bash", command="echo x > f")),
+            asst(tool_use("Bash", command="rm -rf build")),
+        ])
+        self.assertEqual(kernel_state.parse(p).first_destructive_at(), 1)
+
+    def test_first_destructive_at_is_none_when_absent(self):
+        p = transcript([asst(tool_use("Bash", command="ls"))])
+        self.assertIsNone(kernel_state.parse(p).first_destructive_at())
+
     def test_cells_written_to_the_process_channel_are_seen(self):
         """K6 sends process records to a notes file, not the reply. A placement
         written there must still count, or the gate is blind to correct behaviour."""
