@@ -49,6 +49,13 @@ claim to:
    Temporary destructive steps are eligible only with reversibility
    established in advance — captured prior state, stated rollback, verified
    restoration, outcome classified after restoration; irreversible or unverified damage is ineligible.
+
+   *Empirical basis:* Bayer & Glimcher (2005, *Neuron* 47:129-141) found
+   dopamine firing rate encodes positive RPE but does not carry negative RPE;
+   Bayer, Lau & Glimcher (2007) located the negative magnitude in the duration
+   of the post-reward interspike pause instead. Two encodings, two units, no
+   signed scalar. A regression is handled in its own channel, never netted
+   against progress.
 6. **One declared tie-break convention** (a design choice, subordinate to the
    unapplied-information gate in `quantities.md`): under incomparability,
    prefer the higher-`i` option only when a named unresolved uncertainty is decision-critical,
