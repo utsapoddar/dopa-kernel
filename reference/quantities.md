@@ -51,8 +51,20 @@ Record `δ[r]` and `δ[i]` separately when both were predicted; never merge
 incomparable outcomes into one reading. A missing prediction makes that `δ`
 unscorable — record `δ: unscorable` and never reconstruct it from hindsight.
 A `δ` written after the outcome without a prior `expect` is not a calibration
-reading; it is a story about the past. The TD equation behind `δ` is
-conceptual only; no `V(s)`, `γ`, or numeric error is ever computed.
+reading; it is a story about the past. **Empirical grounding.** Dopamine encodes reward prediction error as a
+*distributional*, multi-channel code, not a scalar. Dabney et al. (2020,
+*Nature* 577:671-675) recorded 40 VTA cells across 6 animals and found each
+cell carries its own asymmetric scaling for positive vs negative RPE, mean
+ratio **0.48**, with significant diversity (ANOVA `F(38,234) = 2.93,
+p = 4e-7`). For one identical 5 uL reward, 13/40 cells fired above baseline
+while 10/40 fired below — same reward, opposite sign, simultaneously.
+Asymmetry correlates with each cell's reversal point (`p = 8.1e-5`), which is
+how the population encodes expectiles of the return distribution.
+
+This is why no scalar exchange rate between `r` and `i` exists and none may be
+invented: the measured code is multi-channel with diverse gains, and a single
+number would discard exactly the structure the axes preserve. No numeric `δ`,
+`V(s)`, or `γ` is ever computed.
 
 ## Policy table
 
@@ -71,6 +83,19 @@ surprise is not low value. A regression is handled explicitly, never hidden in
 the no-progress column.
 
 ## Pacing and the anti-recursion rule
+
+**The pacing quantity is computable.** Niv, Daw, Joel & Dayan (2007,
+*Psychopharmacology* 191:507-520) model an agent choosing both an action and a
+latency `tau`, paying a vigor cost `C_v / tau` and an opportunity cost of time
+`Rbar * tau`, where `Rbar` is the average reward rate. Differentiating their
+value equation gives their Eq. 4:
+
+    tau* = sqrt(C_v / Rbar)
+
+Optimal latency depends solely on the vigor cost constant and the average
+reward rate, identically for every action — which is why a single tonic level
+retunes the pace of everything at once. Here `Rbar` is verified-progress events
+per unit time and `C_v` is the single free constant (default 1.0).
 
 Tonic pacing is phase-aware and tracks two channels without summing them: the
 verified `r` rate, and whether recent `i` converted into an action or removed

@@ -70,5 +70,21 @@ else
   pass "public engine contains no private paths or credentials"
 fi
 
+# ---- empirical grounding ----
+for probe in \
+  "reference/quantities.md|Dabney|quantities cites the distributional RPE source" \
+  "reference/quantities.md|tau* = sqrt(C_v / Rbar)|quantities states the vigor equation" \
+  "reference/matrix.md|Bayer|matrix cites the asymmetric-channel source"
+do
+  f=${probe%%|*}; rest=${probe#*|}; needle=${rest%%|*}; label=${rest#*|}
+  if grep -qF -- "$needle" "$ROOT/$f" 2>/dev/null; then pass "$label"; else fail "$label"; fi
+done
+
+if grep -qF -- 'conceptual only' "$ROOT/reference/quantities.md" 2>/dev/null; then
+  fail "the conceptual-only placeholder is gone"
+else
+  pass "the conceptual-only placeholder is gone"
+fi
+
 printf '\n%d passed; %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
