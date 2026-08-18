@@ -144,6 +144,38 @@ class TestKernelState(unittest.TestCase):
         p = transcript([asst(tool_use("Skill", skill="dopa-kernel"))])
         self.assertEqual(kernel_state.parse(p).skill_name, "dopa-kernel")
 
+    def test_cells_written_to_the_process_channel_are_seen(self):
+        """K6 sends process records to a notes file, not the reply. A placement
+        written there must still count, or the gate is blind to correct behaviour."""
+        p = transcript([
+            asst(tool_use("Write", file_path="/tmp/x/scratchpad/process-notes.md",
+                          content="## envelope\ncell[C]: outside\ncell[r]: neutral\n")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertEqual(st.latest_envelope_class(), "outside")
+
+    def test_cells_in_an_edit_new_string_are_seen(self):
+        p = transcript([
+            asst(tool_use("Edit", file_path="/tmp/x/scratchpad/process-notes.md",
+                          old_string="a", new_string="cell[C]: inside")),
+        ])
+        self.assertEqual(kernel_state.parse(p).latest_envelope_class(), "inside")
+
+    def test_cells_written_via_bash_heredoc_are_seen(self):
+        """Notes are commonly written with `cat > notes <<EOF`, putting the
+        placement in the Bash command rather than a Write input."""
+        cmd = "cat > notes.md <<'EOF'\n## envelope\ncell[C]: outside\ncell[r]: neutral\nEOF"
+        p = transcript([asst(tool_use("Bash", command=cmd))])
+        self.assertEqual(kernel_state.parse(p).latest_envelope_class(), "outside")
+
+    def test_grepping_for_cell_is_not_a_placement(self):
+        p = transcript([asst(tool_use("Bash", command="grep -n 'cell\\[' notes.md"))])
+        self.assertEqual(kernel_state.parse(p).cells, [])
+
+    def test_prose_mentioning_cell_brackets_is_not_a_placement(self):
+        p = transcript([asst(text_block("The `cell[C]` / `cell[r]` placements are ceremony"))])
+        self.assertEqual(kernel_state.parse(p).cells, [])
+
     def test_hook_feedback_is_not_counted_as_a_user_turn(self):
         p = transcript([
             user("real request"),

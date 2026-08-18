@@ -96,6 +96,13 @@ def _scan_tool_use(state: KernelState, idx: int, block: dict) -> None:
         return
     if name in MUTATORS:
         state.mutations.append((idx, name, str(inp.get("file_path") or "")))
+    # K6 sends process records to a notes file rather than the reply, so a cell
+    # placement usually arrives as written content, not as assistant text.
+    # Scanning only text would make correct behaviour invisible to the gates.
+    for field_name in ("content", "new_string", "command"):
+        written = inp.get(field_name)
+        if isinstance(written, str) and "cell[" in written:
+            _scan_text(state, idx, written)
     blob = str(inp.get("file_path") or inp.get("command") or "")
     match = _MODULE_RE.search(blob)
     if match:
