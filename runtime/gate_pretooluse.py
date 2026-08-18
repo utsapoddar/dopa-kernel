@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kernel_state  # noqa: E402
 
-MUTATORS = {"Write", "Edit", "NotebookEdit"}
+MUTATORS = set(kernel_state.MUTATORS)
 SCRATCH_MARKERS = ("/tmp/", "/private/tmp/", "scratchpad/")
 
 

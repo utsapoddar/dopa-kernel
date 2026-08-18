@@ -103,6 +103,55 @@ class TestKernelState(unittest.TestCase):
         p = transcript([user("one"), asst(text_block("a")), user("two")])
         self.assertEqual(kernel_state.parse(p).last_user_at, 2)
 
+    def test_mutations_are_recorded_with_index_and_path(self):
+        p = transcript([
+            asst(tool_use("Skill", skill="dopa-kernel")),
+            asst(tool_use("Write", file_path="/Users/x/app/main.py")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertEqual(st.mutations, [(1, "Write", "/Users/x/app/main.py")])
+
+    def test_edit_and_notebookedit_count_as_mutations(self):
+        p = transcript([
+            asst(tool_use("Edit", file_path="/a.py")),
+            asst(tool_use("NotebookEdit", file_path="/b.ipynb")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertEqual([m[1] for m in st.mutations], ["Edit", "NotebookEdit"])
+
+    def test_read_is_not_a_mutation(self):
+        p = transcript([asst(tool_use("Read", file_path="/a.py"))])
+        self.assertEqual(kernel_state.parse(p).mutations, [])
+
+    def test_first_mutation_at_reports_earliest_index(self):
+        p = transcript([
+            asst(tool_use("Write", file_path="/a.py")),
+            asst(tool_use("Write", file_path="/b.py")),
+        ])
+        self.assertEqual(kernel_state.parse(p).first_mutation_at(), 0)
+
+    def test_first_mutation_at_is_none_without_mutations(self):
+        p = transcript([asst(text_block("hi"))])
+        self.assertIsNone(kernel_state.parse(p).first_mutation_at())
+
+    def test_skill_name_records_which_skill_activated(self):
+        p = transcript([asst(tool_use("Skill", skill="dopa-kernel"))])
+        self.assertEqual(kernel_state.parse(p).skill_name, "dopa-kernel")
+
+    def test_all_reads_of_a_module_are_retained(self):
+        p = transcript([
+            asst(tool_use("Read", file_path=SKILL + "completion.md")),
+            user("next"),
+            asst(tool_use("Read", file_path=SKILL + "completion.md")),
+        ])
+        st = kernel_state.parse(p)
+        self.assertEqual(st.all_module_reads["completion.md"], [0, 2])
+        self.assertEqual(st.modules_read["completion.md"], 2)
+
+    def test_user_turns_are_all_recorded(self):
+        p = transcript([user("a"), asst(text_block("x")), user("b")])
+        self.assertEqual(kernel_state.parse(p).user_turns, [0, 2])
+
     def test_missing_file_returns_inactive_state(self):
         st = kernel_state.parse("/nonexistent/path.jsonl")
         self.assertFalse(st.active)

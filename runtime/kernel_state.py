@@ -12,6 +12,7 @@ from pathlib import Path
 
 SKILL_NAME = "dopa-kernel"
 ADAPTERS = ("artifact.md", "decision.md", "execution.md", "combined.md")
+MUTATORS = ("Write", "Edit", "NotebookEdit")
 
 _MODULE_RE = re.compile(r"skills/dopa-kernel/modules/([a-z0-9\-]+\.md)")
 _CELL_RE = re.compile(r"^[ \t>*\-]*cell\[(C|r|i)\]:[ \t]*([a-z\-]+)", re.M)
@@ -22,15 +23,22 @@ _EXPECT_RE = re.compile(r"^[ \t>*\-]*expect\[(r|i)\]:[ \t]*(\S.*)$", re.M)
 class KernelState:
     active: bool = False
     activated_at: int | None = None
+    skill_name: str | None = None
     modules_read: dict[str, int] = field(default_factory=dict)
+    all_module_reads: dict[str, list[int]] = field(default_factory=dict)
     cells: list[tuple[int, str, str]] = field(default_factory=list)
     expects: list[tuple[int, str, str]] = field(default_factory=list)
+    mutations: list[tuple[int, str, str]] = field(default_factory=list)
     last_user_at: int = -1
+    user_turns: list[int] = field(default_factory=list)
     records: int = 0
 
     def domain_adapter(self) -> str | None:
         found = [(idx, name) for name, idx in self.modules_read.items() if name in ADAPTERS]
         return min(found)[1] if found else None
+
+    def first_mutation_at(self) -> int | None:
+        return self.mutations[0][0] if self.mutations else None
 
     def latest_envelope_class(self) -> str | None:
         for _idx, axis, value in reversed(self.cells):
@@ -59,6 +67,7 @@ def parse(path: str) -> KernelState:
         content = message.get("content")
         if role == "user" and isinstance(content, str):
             state.last_user_at = idx
+            state.user_turns.append(idx)
         if not isinstance(content, list):
             continue
         for block in content:
@@ -74,15 +83,21 @@ def parse(path: str) -> KernelState:
 
 def _scan_tool_use(state: KernelState, idx: int, block: dict) -> None:
     inp = block.get("input") or {}
-    if block.get("name") == "Skill" and inp.get("skill") == SKILL_NAME:
+    name = block.get("name")
+    if name == "Skill" and inp.get("skill") == SKILL_NAME:
         state.active = True
         if state.activated_at is None:
             state.activated_at = idx
+            state.skill_name = SKILL_NAME
         return
+    if name in MUTATORS:
+        state.mutations.append((idx, name, str(inp.get("file_path") or "")))
     blob = str(inp.get("file_path") or inp.get("command") or "")
     match = _MODULE_RE.search(blob)
     if match:
-        state.modules_read[match.group(1)] = idx
+        name = match.group(1)
+        state.modules_read[name] = idx
+        state.all_module_reads.setdefault(name, []).append(idx)
 
 
 def _scan_text(state: KernelState, idx: int, text: str) -> None:
