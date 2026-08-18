@@ -86,5 +86,15 @@ else
   pass "the conceptual-only placeholder is gone"
 fi
 
+# ---- emission contract ----
+for probe in \
+  "SKILL.md|cell[C]:|envelope placement is emitted" \
+  "SKILL.md|cell[r]:|progress placement is emitted" \
+  "SKILL.md|cell[i]:|information placement is emitted"
+do
+  f=${probe%%|*}; rest=${probe#*|}; needle=${rest%%|*}; label=${rest#*|}
+  if grep -qF -- "$needle" "$ROOT/$f" 2>/dev/null; then pass "$label"; else fail "$label"; fi
+done
+
 printf '\n%d passed; %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

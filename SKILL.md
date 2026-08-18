@@ -72,10 +72,17 @@ execution → `modules/decision.md`; coding or tool execution →
 Mixed work takes combined.
 
 Auditable floor, kept in the process channel: one envelope block, one
-`expect[r]:` line before the first production step (and `expect[i]:` only when
-material), and a per-item gate walk before delivering. This is the auditable
-floor. If no prior `expect` was stated, record `δ: unscorable`
-rather than reconstructing a reading from hindsight.
+`expect[r]:` line before the first production step (`expect[i]:` only when
+material), one cell placement per outcome, and a per-item gate walk before
+delivering. Without a prior `expect`, record `δ: unscorable`, never hindsight.
+
+Write placement on its own lines, values fixed by `reference/matrix.md`:
+
+    cell[C]: inside | outside
+    cell[r]: advanced | neutral | regressed
+    cell[i]: decision-changing | decision-constraining | none
+
+Writing it is placing it; `cell[C]: outside` routes to `proposal.md`.
 
 ## Mid-task entry
 
