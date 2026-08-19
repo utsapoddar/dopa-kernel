@@ -261,3 +261,42 @@ class TestKernelState(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStakesParsing(unittest.TestCase):
+    def scan(self, text):
+        st = kernel_state.KernelState()
+        kernel_state._scan_text(st, 7, text)
+        return st
+
+    def test_declaration_is_parsed(self):
+        st = self.scan("imp: 4\ndue: 2026-09-08\n")
+        self.assertEqual(st.imps, [(7, 4)])
+        self.assertEqual(st.dues, [(7, "2026-09-08")])
+        self.assertEqual(st.importance(), 4)
+        self.assertEqual(st.due(), "2026-09-08")
+
+    def test_kernel_menu_lines_are_not_declarations(self):
+        st = self.scan("    imp: 1 | 2 | 3 | 4 | 5\n    due: YYYY-MM-DD | none\n")
+        self.assertEqual(st.imps, [])
+        self.assertEqual(st.dues, [])
+
+    def test_undeclared_importance_defaults_to_three_but_reports_undeclared(self):
+        st = self.scan("no stakes here")
+        self.assertEqual(st.importance(), kernel_state.DEFAULT_IMP)
+        self.assertIsNone(st.importance_declared_at())
+
+    def test_quoted_and_bulleted_lines_still_declare(self):
+        st = self.scan("- imp: 5 (Canada PR, unextendable)\n> due: none\n")
+        self.assertEqual(st.importance(), 5)
+        self.assertEqual(st.due(), "none")
+
+    def test_out_of_range_importance_is_ignored(self):
+        self.assertEqual(self.scan("imp: 7\n").imps, [])
+        self.assertEqual(self.scan("imp: 0\n").imps, [])
+
+    def test_latest_declaration_wins_but_first_marks_when_declared(self):
+        st = self.scan("imp: 2\n")
+        kernel_state._scan_text(st, 40, "imp: 5\n")
+        self.assertEqual(st.importance(), 5)
+        self.assertEqual(st.importance_declared_at(), 7)

@@ -31,6 +31,20 @@ You cannot finish by learning things.
 **The asymmetry is the mechanism:** you cannot stop by asserting "good enough", and you cannot continue by asserting "could be better". Both
 directions require naming something specific.
 
+## Stakes raise the gate
+
+At `imp` ≥ 4 — frozen with the envelope under K1, see `reference/matrix.md` 8c
+— two further conditions bind:
+
+4. **Re-verified at the gate.** Every item is observed again here, never
+   carried forward from earlier in the session. An observation taken before the
+   gate has become a recalled one by the time the claim is made.
+5. **No asserted items.** An item that lands asserted-not-evidenced
+   fails the gate outright: surface it and stop. Never claim completion with
+   the gap noted alongside it.
+
+At `imp` ≤ 3 both remain good practice and neither blocks.
+
 ## The ledger
 
 Write the walk in the process channel — never in the deliverable — with

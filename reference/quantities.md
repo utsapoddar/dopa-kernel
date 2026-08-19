@@ -97,6 +97,22 @@ reward rate, identically for every action — which is why a single tonic level
 retunes the pace of everything at once. Here `Rbar` is verified-progress events
 per unit time and `C_v` is the single free constant (default 1.0).
 
+**Scope, stated plainly.** This equation governs *pace* and never quality. The
+evidence bar is floored by `imp` (`matrix.md` 8c); `imp` does not appear in this
+expression and no rate of progress and no deadline buys a weaker check. `C_v` is
+what ceremony costs in the current envelope — a calibration knob, not a measured
+value, and 1.0 is a placeholder rather than a finding.
+
+**What transfers and what does not.** Niv's derivation assumes a free-operant
+setting: an exogenous reward stream forgone by being slow, and a latency in real
+time. A session has neither in that form — its scarce resource is context and
+turns rather than seconds, and the task waits while the agent thinks. What
+transfers is the shape: one scalar rate retunes the pace of everything at once,
+monotonically decreasing in `Rbar`. `runtime/pacing.py` computes it and
+`runtime/compliance.py` reports it per session with `Rbar` denominated in
+transcript records. **No gate reads it** — it is an observed diagnostic, not a
+controller.
+
 Tonic pacing is phase-aware and tracks two channels without summing them: the
 verified `r` rate, and whether recent `i` converted into an action or removed
 a live alternative.

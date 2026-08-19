@@ -96,5 +96,32 @@ do
   if grep -qF -- "$needle" "$ROOT/$f" 2>/dev/null; then pass "$label"; else fail "$label"; fi
 done
 
+
+# ---- stakes contract ----
+has "$ROOT/SKILL.md" "imp:" "importance is emitted"
+has "$ROOT/SKILL.md" "due:" "deadline is emitted"
+has "$ROOT/SKILL.md" "importance, default 3" "importance default is stated"
+has "$ROOT/SKILL.md" "waits for" "high importance waits for the user"
+has "$ROOT/SKILL.md" "never through it" "urgency cannot cut below the importance floor"
+has "$ROOT/reference/matrix.md" "8c. Stakes" "matrix carries the stakes section"
+has "$ROOT/reference/matrix.md" "never assigned by the controller" "stakes are not self-assigned"
+has "$ROOT/reference/matrix.md" "independent or held-out check" "imp 4-5 raises the evidence bar"
+has "$ROOT/reference/matrix.md" "verified at its source rather than recalled" "imp 4-5 bans recalled facts"
+has "$ROOT/reference/matrix.md" "Tobler, Fiorillo & Schultz (2005" "adaptive rescaling is cited"
+has "$ROOT/reference/matrix.md" "gain adjusted to the" "the cited mechanism is variance gain, not magnitude"
+has "$ROOT/modules/completion.md" "Re-verified at the gate" "imp 4-5 re-verifies at the gate"
+has "$ROOT/modules/completion.md" "fails the gate outright" "imp 4-5 refuses asserted items"
+for adapter in artifact decision execution combined; do
+  has "$ROOT/modules/$adapter.md" "## Stakes" "$adapter adapter carries stakes"
+  has "$ROOT/modules/$adapter.md" "least two approaches" "$adapter adapter requires alternatives at imp 4+"
+done
+
+# the two axes must never be fused into one score anywhere in the payload
+if grep -rlF -- '0.6 * urgency' "$ROOT/SKILL.md" "$ROOT/modules" "$ROOT/reference" >/dev/null 2>&1; then
+  fail "importance and urgency are never fused into one score"
+else
+  pass "importance and urgency are never fused into one score"
+fi
+
 printf '\n%d passed; %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

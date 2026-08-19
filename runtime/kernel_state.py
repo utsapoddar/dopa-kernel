@@ -19,6 +19,13 @@ MUTATORS = ("Write", "Edit", "NotebookEdit")
 _MODULE_RE = re.compile(r"skills/dopa-kernel/modules/([a-z0-9\-]+\.md)")
 _CELL_RE = re.compile(r"^[ \t>*\-]*cell\[(C|r|i)\]:[ \t]*([a-z\-]+)", re.M)
 _EXPECT_RE = re.compile(r"^[ \t>*\-]*expect\[(r|i)\]:[ \t]*(\S.*)$", re.M)
+# The trailing `(?![^\n]*\|)` refuses any line that still carries a `|`, so the
+# menu lines in SKILL.md (`imp: 1 | 2 | 3 | 4 | 5`) can never be misread as a
+# declaration if the kernel text is ever echoed into a tool input.
+_IMP_RE = re.compile(r"^[ \t>*\-]*imp:[ \t]*([1-5])\b(?![^\n]*\|)", re.M)
+_DUE_RE = re.compile(r"^[ \t>*\-]*due:[ \t]*(\d{4}-\d{2}-\d{2}|none)\b(?![^\n]*\|)", re.M)
+STAKES_MARKERS = ("cell[", "imp:", "due:")
+DEFAULT_IMP = 3
 
 
 @dataclass
@@ -30,6 +37,8 @@ class KernelState:
     all_module_reads: dict[str, list[int]] = field(default_factory=dict)
     cells: list[tuple[int, str, str]] = field(default_factory=list)
     expects: list[tuple[int, str, str]] = field(default_factory=list)
+    imps: list[tuple[int, int]] = field(default_factory=list)
+    dues: list[tuple[int, str]] = field(default_factory=list)
     mutations: list[tuple[int, str, str]] = field(default_factory=list)
     bash_ops: list[tuple[int, str]] = field(default_factory=list)
     substantive_ops: list[int] = field(default_factory=list)
@@ -53,6 +62,20 @@ class KernelState:
             if effect == "destructive":
                 return idx
         return None
+
+    def importance(self) -> int:
+        """Declared `imp`, or the kernel's documented default when none was set.
+
+        Callers that must distinguish "declared 3" from "never declared" ask
+        importance_declared_at() instead; a stake nobody set is not a stake.
+        """
+        return self.imps[-1][1] if self.imps else DEFAULT_IMP
+
+    def importance_declared_at(self) -> int | None:
+        return self.imps[0][0] if self.imps else None
+
+    def due(self) -> str | None:
+        return self.dues[-1][1] if self.dues else None
 
     def latest_envelope_class(self) -> str | None:
         for _idx, axis, value in reversed(self.cells):
@@ -122,7 +145,7 @@ def _scan_tool_use(state: KernelState, idx: int, block: dict) -> None:
     # Scanning only text would make correct behaviour invisible to the gates.
     for field_name in ("content", "new_string", "command"):
         written = inp.get(field_name)
-        if isinstance(written, str) and "cell[" in written:
+        if isinstance(written, str) and any(m in written for m in STAKES_MARKERS):
             _scan_text(state, idx, written)
 
     blob = str(inp.get("file_path") or inp.get("command") or "")
@@ -144,3 +167,7 @@ def _scan_text(state: KernelState, idx: int, text: str) -> None:
         state.cells.append((idx, axis, value))
     for target, rest in _EXPECT_RE.findall(text):
         state.expects.append((idx, target, rest.strip()))
+    for value in _IMP_RE.findall(text):
+        state.imps.append((idx, int(value)))
+    for value in _DUE_RE.findall(text):
+        state.dues.append((idx, value))

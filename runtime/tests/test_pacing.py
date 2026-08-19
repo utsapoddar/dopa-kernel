@@ -27,5 +27,37 @@ class TestPacing(unittest.TestCase):
             pacing.optimal_latency(1.0, 0.0)
 
 
+class TestStakesAxes(unittest.TestCase):
+    def test_urgency_bands_match_the_tracker(self):
+        self.assertEqual(pacing.urgency(-1), 100)
+        self.assertEqual(pacing.urgency(3), 95)
+        self.assertEqual(pacing.urgency(7), 85)
+        self.assertEqual(pacing.urgency(14), 70)
+        self.assertEqual(pacing.urgency(30), 50)
+        self.assertEqual(pacing.urgency(60), 30)
+        self.assertEqual(pacing.urgency(90), 15)
+        self.assertEqual(pacing.urgency(400), 5)
+
+    def test_no_deadline_is_unpaced_not_slow(self):
+        self.assertEqual(pacing.urgency(None), 0)
+
+    def test_urgency_is_monotone_non_increasing_in_days_left(self):
+        values = [pacing.urgency(d) for d in range(-1, 200)]
+        self.assertEqual(values, sorted(values, reverse=True))
+
+    def test_evidence_floor_rises_with_importance(self):
+        self.assertEqual(pacing.evidence_floor(1), "observed")
+        self.assertEqual(pacing.evidence_floor(3), "not-hand-fit")
+        self.assertEqual(pacing.evidence_floor(5), "independent-or-held-out")
+
+    def test_unknown_importance_falls_back_to_the_strictest_floor(self):
+        self.assertEqual(pacing.evidence_floor(99), "independent-or-held-out")
+
+    def test_the_two_axes_are_never_combined(self):
+        # The absence of a combine()/score() is the design, not an omission.
+        for name in ("combine", "score", "priority", "stake_score"):
+            self.assertFalse(hasattr(pacing, name), f"pacing must not expose {name}()")
+
+
 if __name__ == "__main__":
     unittest.main()

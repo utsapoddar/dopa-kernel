@@ -10,6 +10,9 @@ def state(**kw):
     st = KernelState(active=kw.pop("active", True))
     st.modules_read = kw.pop("modules_read", {})
     st.cells = kw.pop("cells", [])
+    # Stakes are declared by default so each test below exercises the gate it
+    # names rather than tripping K1 first; the stakes gate has its own tests.
+    st.imps = kw.pop("imps", [(0, 3)])
     return st
 
 
@@ -104,3 +107,42 @@ class TestPreToolUseGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStakesGate(unittest.TestCase):
+    def test_write_without_declared_stakes_is_blocked(self):
+        reason = gate.decide(state(modules_read=FULL, imps=[]), "Write", REAL)
+        self.assertIsNotNone(reason)
+        self.assertIn("K1", reason)
+        self.assertIn("imp", reason)
+
+    def test_stakes_gate_precedes_the_adapter_gate(self):
+        reason = gate.decide(state(modules_read={}, imps=[]), "Write", REAL)
+        self.assertIn("K1", reason)
+        self.assertNotIn("K2", reason)
+
+    def test_the_declaring_write_is_not_blocked_by_its_own_gate(self):
+        st = state(modules_read=FULL, imps=[])
+        payload = {"file_path": "/tmp/z/scratchpad/notes.md",
+                   "content": "envelope\nimp: 4\ndue: 2026-09-08\n"}
+        self.assertIsNone(gate.decide(st, "Write", payload))
+
+    def test_declaring_via_bash_heredoc_also_clears_the_gate(self):
+        st = state(modules_read=FULL, imps=[])
+        payload = {"command": "cat >> notes.md <<'EOF'\nimp: 2\nEOF"}
+        self.assertIsNone(gate.decide(st, "Bash", payload))
+
+    def test_menu_line_from_the_kernel_text_does_not_count_as_declaring(self):
+        st = state(modules_read=FULL, imps=[])
+        payload = {"file_path": "/tmp/z/scratchpad/n.md",
+                   "content": "    imp: 1 | 2 | 3 | 4 | 5\n"}
+        self.assertIsNotNone(gate.decide(st, "Bash", {"command": "rm -rf /tmp/z"}))
+        self.assertIsNotNone(gate.decide(st, "Write", payload))
+
+    def test_stakes_gate_is_inert_when_kernel_not_active(self):
+        st = state(active=False, modules_read={}, imps=[])
+        self.assertIsNone(gate.decide(st, "Write", REAL))
+
+    def test_non_mutating_tool_never_trips_the_stakes_gate(self):
+        st = state(modules_read={}, imps=[])
+        self.assertIsNone(gate.decide(st, "Read", REAL))

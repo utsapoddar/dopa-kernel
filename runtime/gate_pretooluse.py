@@ -22,6 +22,20 @@ def is_scratch(path: str) -> bool:
     return any(marker in path for marker in SCRATCH_MARKERS)
 
 
+def declares_stakes(tool_input: dict) -> bool:
+    """Does the pending call itself carry an `imp:` declaration?
+
+    Without this the gate deadlocks: the envelope block is written with a tool
+    call, so blocking every write until stakes exist would block the very write
+    that declares them.
+    """
+    for field_name in ("content", "new_string", "command"):
+        written = tool_input.get(field_name)
+        if isinstance(written, str) and kernel_state._IMP_RE.search(written):
+            return True
+    return False
+
+
 def decide(state, tool_name: str, tool_input: dict) -> str | None:
     """Return a blocking reason, or None to allow.
 
@@ -37,6 +51,11 @@ def decide(state, tool_name: str, tool_input: dict) -> str | None:
         return None
     if is_bash and not bash_effect.is_destructive(tool_input.get("command")):
         return None
+    if state.importance_declared_at() is None and not declares_stakes(tool_input):
+        return ("K1 not satisfied: stakes not declared. Write `imp: 1-5` and `due:` "
+                "on their own lines in the envelope block before working. Propose "
+                "the value from what you have read and show that evidence; at a "
+                "proposed imp of 4 or 5, wait for the user's word.")
     if state.domain_adapter() is None:
         return ("K2 not satisfied: no domain adapter invoked. Read exactly one of "
                 "modules/{artifact,decision,execution,combined}.md before working.")
