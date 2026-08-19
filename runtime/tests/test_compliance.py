@@ -17,6 +17,7 @@ def state(**kw):
     st.user_turns = kw.pop("user_turns", [st.last_user_at])
     st.bash_ops = kw.pop("bash_ops", [])
     st.substantive_ops = kw.pop("substantive_ops", [st.last_user_at + 1])
+    st.imps = kw.pop("imps", [])
     return st
 
 
@@ -150,3 +151,28 @@ class TestAggregate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStakesGate(unittest.TestCase):
+    def test_session_that_never_declared_stakes_misses(self):
+        r = compliance.assess(state(mutations=[(5, "Write", REAL)]))
+        self.assertTrue(r["stakes"]["opportunity"])
+        self.assertFalse(r["stakes"]["compliant"])
+
+    def test_stakes_declared_before_the_first_mutation_complies(self):
+        r = compliance.assess(state(imps=[(2, 4)], mutations=[(5, "Write", REAL)]))
+        self.assertTrue(r["stakes"]["compliant"])
+
+    def test_stakes_declared_after_work_started_does_not_comply(self):
+        r = compliance.assess(state(imps=[(9, 4)], mutations=[(5, "Write", REAL)]))
+        self.assertFalse(r["stakes"]["compliant"])
+
+    def test_a_session_with_no_mutations_still_complies_by_declaring(self):
+        r = compliance.assess(state(imps=[(2, 3)], mutations=[]))
+        self.assertTrue(r["stakes"]["compliant"])
+
+    def test_every_active_session_is_a_stakes_opportunity(self):
+        self.assertTrue(compliance.assess(state())["stakes"]["opportunity"])
+
+    def test_stakes_is_a_reported_gate(self):
+        self.assertIn("stakes", compliance.GATES)

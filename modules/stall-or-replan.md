@@ -28,6 +28,12 @@ the no-progress column — go to `rollback.md`.
   that information, not gathering more.
 - Low `r` and no new `i` → slow down; pick one bounded observation or a
   different approach.
+
+This is the discrete form of `tau* = sqrt(C_v / Rbar)` (`runtime/pacing.py`,
+`reference/quantities.md`): ceremony falls as the verified-progress rate rises.
+It sets pace only. The `imp` floor from `reference/matrix.md` 8c is outside it,
+so "move fast with minimal ceremony" means minimal **above** that floor — no
+progress rate and no deadline lowers what counts as evidence.
 - Repeated information-only outcomes without subsequent progress → an
   **information loop**; act, test, or surface the unresolved choice instead of
   researching again.

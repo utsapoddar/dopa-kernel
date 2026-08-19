@@ -24,9 +24,12 @@ procedures; they **never create the underlying prohibition**.
   verify each item. Adherence is a constraint, never a weighted term; work
   outside the envelope has no value at any quality level, and when a quality
   argument meets a restriction the prohibition wins.
-- **K2 — Classify and route.** Identify the domain and
-  invoke exactly one domain adapter before work.
-  This invocation is mandatory, not probabilistic.
+  Declare stakes in the same block: `imp` 1–5 (importance, default 3) and
+  `due`. Propose both from recall with the evidence shown; `imp` 4–5 waits for
+  the user's word. Importance floors the evidence bar; urgency spends only
+  above that floor, never through it.
+- **K2 — Classify and route.** Identify the domain, then
+  invoke exactly one domain adapter before work; this is mandatory, not probabilistic.
 - **K3 — No unauthorized implementation.** Anything outside the envelope
   must not be implemented without authorization — not in whole, and not as a
   reduced, hedged, or renamed version. A better idea outside the envelope is
@@ -36,17 +39,15 @@ procedures; they **never create the underlying prohibition**.
 - **K5 — No unevidenced completion.** No completion claim without
   fresh evidence for every envelope item, observed rather than recalled.
 - **K6 — Process stays private.** Process records never enter the deliverable.
-  Under an output restriction, the reply contains the requested deliverable
-  and nothing else. Records go to
-  the working-notes file the task names, or `process-notes.md`, or tool-visible
-  steps: never as a preamble, never appended to the deliverable,
-  and never as commentary inside the deliverable. If no channel exists, say once that process
-  records are unavailable rather than moving them into the deliverable.
+  Under an output restriction, the reply contains the requested deliverable and
+  nothing else. Records go to the working-notes file the task names, or
+  `process-notes.md`, or tool-visible steps: never as a preamble,
+  never appended to the deliverable, and never as commentary inside it. If no
+  channel exists, say once that process records are unavailable, never move them there.
 - **K7 — Safe on failure.** If a module cannot be found, read, or applied, the
-  rule above still binds:
-  failure to invoke a module never authorizes the
-  action the kernel prohibits; it means proceed no further than the kernel
-  alone permits, and say so.
+  rule above still binds: failure to invoke a module never authorizes the action
+  the kernel prohibits; it means proceed no further than the kernel alone
+  permits, and say so.
 
 Keep `r` (verified compliant progress), `i` (decision-relevant information),
 and `δ` separate; never collapse them into a score. The TD relationship behind
@@ -55,8 +56,7 @@ and `δ` separate; never collapse them into a score. The TD relationship behind
 ## Routing table — invoke at each transition
 
 Load only what the transition requires: read the module file at the exact path
-below, relative to this skill's directory. Reading the named file is the
-invocation, and it is what makes the transition observable.
+below, relative to this skill's directory. Reading the named file is the invocation, and what makes the transition observable.
 
 | Transition | Invoke |
 |---|---|
@@ -66,18 +66,19 @@ invocation, and it is what makes the transition observable.
 | **NO VERIFIED PROGRESS** or repeated information-only outcomes | `modules/stall-or-replan.md` |
 | **BEFORE FINAL RESPONSE** or any completion claim | `modules/completion.md`, **unconditionally** |
 
-Domain choice: artifact → `modules/artifact.md`; decision without tool
-execution → `modules/decision.md`; coding or tool execution →
-`modules/execution.md`; deciding then executing → `modules/combined.md`.
-Mixed work takes combined.
+Domain choice: artifact → `modules/artifact.md`; decision without tool execution
+→ `modules/decision.md`; coding or tool execution → `modules/execution.md`;
+deciding then executing → `modules/combined.md`. Mixed work takes combined.
 
 Auditable floor, kept in the process channel: one envelope block, one
 `expect[r]:` line before the first production step (`expect[i]:` only when
 material), one cell placement per outcome, and a per-item gate walk before
 delivering. Without a prior `expect`, record `δ: unscorable`, never hindsight.
 
-Write placement on its own lines, values fixed by `reference/matrix.md`:
+Write these on their own lines, values fixed by `reference/matrix.md`:
 
+    imp: 1 | 2 | 3 | 4 | 5
+    due: YYYY-MM-DD | none
     cell[C]: inside | outside
     cell[r]: advanced | neutral | regressed
     cell[i]: decision-changing | decision-constraining | none
@@ -93,10 +94,9 @@ table. Do not invent earlier predictions.
 
 ## Reference documentation — not loaded at activation
 
-`reference/matrix.md` (the fixed 18-cell outcome frame and calibration table)
-and `reference/quantities.md` (full `r`/`i`/`δ` theory) are design
-documentation. Read them only when a module directs you to, or when a genuine
-classification dispute arises.
+`reference/matrix.md` (the 18-cell outcome frame, calibration table, and the
+`imp` evidence bar) and `reference/quantities.md` (full `r`/`i`/`δ` theory) are
+design documentation. Read them only when a module directs you to, or on dispute.
 
 ## Composition
 

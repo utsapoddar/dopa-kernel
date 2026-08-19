@@ -3,6 +3,15 @@
 Invoked from the router at START when the work commits to a course of action
 and then carries it out. Elaborates K1–K6; creates no new prohibition.
 
+## Stakes
+
+`imp` and `due` are frozen with the envelope under K1. At `imp` ≥ 4, name at
+least two approaches and why the chosen one wins, recorded before the first
+production step. At `imp` ≥ 4 the bar on `r` also rises: `advanced` requires an
+independent or held-out check and every load-bearing fact verified at its
+source rather than recalled (`reference/matrix.md` 8c). Urgency from `due` may
+reduce ceremony above that bar, never below it.
+
 ## Sequence
 
 1. **Decide first.** Check every hard constraint against every option; eliminate

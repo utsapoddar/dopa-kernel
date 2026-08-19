@@ -87,3 +87,55 @@ table to each target and retain both ordinal readings.
 The two tables are linked but not merged: 8a answers what happened on progress
 and information; 8b answers how calibrated the prediction was. An outcome gets
 a reading from each without producing a synthetic net score.
+
+## 8c. Stakes — importance floors the evidence bar
+
+Stakes are two independent declared quantities, frozen with the envelope under
+K1 and never combined into one number:
+
+| Quantity | Values | Governs |
+|---|---|---|
+| **Importance `imp`** | 1–5, default 3 | the evidence bar — what earns `r: advanced` |
+| **Urgency `due`** | a date, or none | pace — ceremony spent *above* that bar |
+
+`imp` is authored or approved by the user, never assigned by the controller on
+its own authority. The controller may propose a value, but must show what it
+read to reach it, and a proposed `imp` of 4 or 5 does not take effect until the
+user confirms it. A self-assigned stake is a self-assigned reward.
+
+**Importance raises the bar on `r`:**
+
+| `imp` | `r: advanced` requires |
+|---|---|
+| 1–2 | any observed check passes |
+| 3 | an observed check the controller did not hand-fit to |
+| 4–5 | an independent or held-out check, **and** every load-bearing fact verified at its source rather than recalled |
+
+At `imp` 4–5, evidence that is only self-consistent — the controller's own
+output agreeing with the controller's own expectation — is `r: neutral`, not
+`advanced`. Nothing about `i` changes: importance rescales one axis, it never
+trades between them, and it never converts an `outside C` outcome into an
+eligible one.
+
+**Precedence over urgency.** Urgency may spend down optional ceremony but never
+below the floor `imp` sets. "Hurry" and "be careful" are not averaged into one
+priority; the floor holds and the pace moves above it. A tracker may fuse the
+two into a single score to sort a queue, because sorting needs only one
+ordering. An executor may not, because the two components prescribe opposite
+actions on the same step.
+
+**Two further effects, elaborated in their own modules:**
+
+- `imp` ≥ 4 requires at least two named approaches and a stated reason for the
+  one chosen, recorded before the first production step — domain adapters.
+- `imp` ≥ 4 requires a separate cited evidence line per envelope item at the
+  completion gate, never an aggregate pass — `modules/completion.md`.
+
+*Empirical basis:* Tobler, Fiorillo & Schultz (2005, *Science* 307:1642-1645)
+found dopamine neurons do not encode absolute reward magnitude. Responses
+shifted relative to the expected reward value and the **gain adjusted to the
+variance of reward value**, so an identical reward produces a different
+response under a different stakes context. Critically, the adaptation was
+driven by reward-predicting stimuli — the scale is set at the cue, before the
+outcome arrives. That is why `imp` is declared with the envelope and never
+inferred afterwards, and it is the same re-baselining 8a already requires.

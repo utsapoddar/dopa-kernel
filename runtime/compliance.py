@@ -18,9 +18,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kernel_state  # noqa: E402
+import pacing  # noqa: E402
 from gate_pretooluse import is_scratch  # noqa: E402
 
-GATES = ("adapter", "rollback", "proposal", "completion", "cell_emission")
+GATES = ("stakes", "adapter", "rollback", "proposal", "completion", "cell_emission")
 
 
 def assess(state) -> dict:
@@ -45,7 +46,13 @@ def assess(state) -> dict:
     proposal_at = state.modules_read.get("proposal.md")
     completion_at = state.modules_read.get("completion.md")
 
+    declared_at = state.importance_declared_at()
     return {
+        "stakes": {
+            "opportunity": True,
+            "compliant": declared_at is not None
+            and (first_mutation is None or declared_at < first_mutation),
+        },
         "adapter": {
             "opportunity": True,
             "compliant": adapter_at is not None
@@ -118,9 +125,21 @@ def scan(roots: list[str]) -> dict:
             if not state.active:
                 continue
             verdicts = assess(state)
+            advanced = sum(1 for _i, axis, value in state.cells
+                           if axis == "r" and value == "advanced")
+            # Records, not seconds: a transcript has no wall clock. This makes
+            # r_bar comparable across sessions but not to any real rate.
+            r_bar = (advanced / state.records) if state.records else 0.0
             sessions.append({
                 "session": path.stem,
                 "records": state.records,
+                "imp": state.importance(),
+                "imp_declared": state.importance_declared_at() is not None,
+                "due": state.due(),
+                "evidence_floor": pacing.evidence_floor(state.importance()),
+                "advanced": advanced,
+                "r_bar": r_bar,
+                "tau_star": pacing.optimal_latency(r_bar),
                 "gates": verdicts,
             })
     return {
@@ -153,7 +172,10 @@ def _render(report: dict) -> str:
                 flags.append(f"{gate}=-")
             else:
                 flags.append(f"{gate}={'ok' if v['compliant'] else 'MISS'}")
-        lines.append(f"  {s['session'][:8]}  ({s['records']:>5} rec)  " + "  ".join(flags))
+        imp = f"{s['imp']}" if s["imp_declared"] else f"{s['imp']}?"
+        tau = "inf" if s["tau_star"] == float("inf") else f"{s['tau_star']:.1f}"
+        lines.append(f"  {s['session'][:8]}  ({s['records']:>5} rec)  "
+                     f"imp={imp:<2} tau*={tau:<5} " + "  ".join(flags))
     lines += [
         "",
         "coverage limits — read these before trusting the rates:",
@@ -164,6 +186,10 @@ def _render(report: dict) -> str:
         "    `cell[C]: outside`; an undeclared excursion is invisible here.",
         "  * `completion` counts only turns that did substantive work; pure",
         "    routing or conversational turns are not opportunities.",
+        "  * `imp` shown with a trailing `?` is the default 3, never declared.",
+        "  * `tau*` is sqrt(1/r_bar) with r_bar denominated in TRANSCRIPT",
+        "    RECORDS, not seconds. It compares sessions to each other and to",
+        "    nothing else. It is reported, not enforced: no gate reads it.",
     ]
     return "\n".join(lines)
 
