@@ -9,6 +9,19 @@ A control loop, not a procedure. Six moves. Everything else is reference.
 
 > Dopa mode: Work carefully and persist until the result satisfies every stated requirement.
 
+## Choose the path before framing the work
+
+You do not pick the path. Enumerate the ways you infer could reach the goal —
+two or twenty — and score each 1-5 on `cost`, `upside`, `confidence`, plus
+whether its failure is **recoverable** and whether its uncertainty is **cheaply
+reducible**. Then run `kernel/decide.py select <file>` and do what it returns.
+`reduce-first` means go look before building. Guessing the scores is your job;
+choosing between them is not, and the gate recomputes the rule from your own
+numbers, so a record that claims a different winner is rejected.
+
+After each attempt run `kernel/decide.py outcome better|as|worse`. Two
+consecutive `worse` on one path closes it: re-select, do not keep repairing.
+
 ## The loop
 
 1. **Frame.** Write what done means, what is off-limits, and `imp`. Once, before acting.

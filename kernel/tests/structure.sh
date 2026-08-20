@@ -10,8 +10,8 @@ absent() { grep -qF -- "$2" "$1" 2>/dev/null && fail "$3" || pass "$3"; }
 K="$ROOT/SKILL.md"
 [ -f "$K" ] && pass "kernel exists" || fail "kernel exists"
 LINES=$(wc -l < "$K" | tr -d ' ')
-[ "$LINES" -le 70 ] && pass "kernel stays under 70 lines (got $LINES)" \
-                    || fail "kernel stays under 70 lines (got $LINES)"
+[ "$LINES" -le 85 ] && pass "kernel stays under 85 lines (got $LINES)" \
+                    || fail "kernel stays under 85 lines (got $LINES)"
 has "$K" 'name: dopa-kernel' "frontmatter name"
 has "$K" 'Dopa mode' "activation trigger"
 # the six moves
@@ -38,6 +38,14 @@ absent "$K" 'modules/' "no module routing table"
 absent "$K" 'cell[' "no cell bookkeeping"
 absent "$K" '2 × 3 × 3' "no matrix defined in the kernel"
 absent "$K" 'unconditionally' "no unconditional module invocation"
+has "$K" 'You do not pick the path' "selection is not the agent's to make"
+has "$K" 'decide.py select' "the selector is named"
+has "$K" 'reduce-first' "reduce-first is explained"
+has "$K" 'closes it' "abandonment is stated"
+absent "$K" 'lexicographic' "the rule itself is not prose"
+[ -f "$ROOT/kernel/decide.py" ] && pass "the selector exists" || fail "the selector exists"
+[ -f "$ROOT/kernel/gate_decide.py" ] && pass "the selection gate exists" || fail "the selection gate exists"
+has "$ROOT/kernel/gate_decide.py" 'recomputes' "the gate recomputes rather than trusts"
 [ -f "$ROOT/kernel/gate_tests.py" ] && pass "the one gate exists" || fail "the one gate exists"
 has "$ROOT/kernel/gate_tests.py" 'cannot author' "the gate reads unauthored evidence"
 [ -d "$ROOT/legacy" ] && pass "legacy preserved for reference" || fail "legacy preserved for reference"
