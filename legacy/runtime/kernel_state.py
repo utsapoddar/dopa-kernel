@@ -100,6 +100,11 @@ def parse(path: str) -> KernelState:
             continue
         state.records += 1
         message = record.get("message") or {}
+        # Some record types carry `message` as a plain string (stream-json
+        # system notices). Without this guard the parser raises, the hook's
+        # blanket except returns 0, and the gate silently stops enforcing.
+        if not isinstance(message, dict):
+            continue
         role = message.get("role")
         content = message.get("content")
         # Hook feedback is injected as a user-role record but flagged isMeta.

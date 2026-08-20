@@ -1,106 +1,79 @@
 ---
 name: dopa-kernel
-description: Use only when the user explicitly says `Dopa mode`, invokes `dopa-kernel`, or asks to activate DopaKernel for artifact, decision, execution, or combined work.
+description: Use only when the user explicitly says `Dopa mode` or invokes `dopa-kernel`.
 ---
 
-# DopaKernel — router
+# DopaKernel
 
-Version: 0.1.0. Small permanent kernel plus explicitly invoked modules.
-Unevaluated: a passing structural contract is structural correctness only.
-
-Trigger sentence, matched across evaluation arms:
+A control loop, not a procedure. Six moves. Everything else is reference.
 
 > Dopa mode: Work carefully and persist until the result satisfies every stated requirement.
 
-## Permanent rules — always in force, never unloaded
+## Choose the path before framing the work
 
-These bind from activation to final response. Modules elaborate their
-procedures; they **never create the underlying prohibition**.
+You do not pick the path. Enumerate the ways you infer could reach the goal —
+two or twenty — and score each 1-5 on `cost`, `upside`, `confidence`, plus
+whether its failure is **recoverable** and whether its uncertainty is **cheaply
+reducible**. Then run `kernel/decide.py select <file>` and do what it returns.
+`reduce-first` means go look before building. Guessing the scores is your job;
+choosing between them is not, and the gate recomputes the rule from your own
+numbers, so a record that claims a different winner is rejected.
 
-- **K1 — Envelope first.** The controller must
-  freeze the authorized envelope before acting, and write it once:
-  **Required:** every stated requirement. **Prohibited:** the user's
-  restrictions, quoted or near-quoted. **Done means:** the evidence that will
-  verify each item. Adherence is a constraint, never a weighted term; work
-  outside the envelope has no value at any quality level, and when a quality
-  argument meets a restriction the prohibition wins.
-  Declare stakes in the same block: `imp` 1–5 (importance, default 3) and
-  `due`. Propose both from recall with the evidence shown; `imp` 4–5 waits for
-  the user's word. Importance floors the evidence bar; urgency spends only
-  above that floor, never through it.
-- **K2 — Classify and route.** Identify the domain, then
-  invoke exactly one domain adapter before work; this is mandatory, not probabilistic.
-- **K3 — No unauthorized implementation.** Anything outside the envelope
-  must not be implemented without authorization — not in whole, and not as a
-  reduced, hedged, or renamed version. A better idea outside the envelope is
-  a proposal, never a substitution.
-- **K4 — No blind state change.** No potentially destructive or state-changing
-  action without captured prior state, prepared rollback, and verification.
-- **K5 — No unevidenced completion.** No completion claim without
-  fresh evidence for every envelope item, observed rather than recalled.
-- **K6 — Process stays private.** Process records never enter the deliverable.
-  Under an output restriction, the reply contains the requested deliverable and
-  nothing else. Records go to the working-notes file the task names, or
-  `process-notes.md`, or tool-visible steps: never as a preamble,
-  never appended to the deliverable, and never as commentary inside it. If no
-  channel exists, say once that process records are unavailable, never move them there.
-- **K7 — Safe on failure.** If a module cannot be found, read, or applied, the
-  rule above still binds: failure to invoke a module never authorizes the action
-  the kernel prohibits; it means proceed no further than the kernel alone
-  permits, and say so.
+After each attempt run `kernel/decide.py outcome better|as|worse`. Two
+consecutive `worse` on one path closes it: re-select, do not keep repairing.
 
-Keep `r` (verified compliant progress), `i` (decision-relevant information),
-and `δ` separate; never collapse them into a score. The TD relationship behind
-`δ` is conceptual only — no `V(s)`, `γ`, reward number, or net score.
+## The loop
 
-## Routing table — invoke at each transition
+1. **Frame.** Write what done means, what is off-limits, and `imp`. Once, before acting.
+2. **Predict.** Write `expect:` — what you think the next action will produce.
+3. **Act.**
+4. **Observe.** Run it. Read the output. An observation is something the
+   environment produced; an assertion is something you produced. "It should
+   work", "the change is complete", and a remembered count are assertions.
+5. **Compare.** Write `got:` with the three readings. The gap between `expect`
+   and `got` is the entire signal — that gap is the only thing worth tracking.
+6. **Never claim done against a failing observation.** If the last thing you ran
+   failed, you are not done, however good the rest looks.
 
-Load only what the transition requires: read the module file at the exact path
-below, relative to this skill's directory. Reading the named file is the invocation, and what makes the transition observable.
+## The readings
 
-| Transition | Invoke |
+Keep them separate. Never sum them, never trade one for another.
+
+| | values |
 |---|---|
-| **START** — freeze envelope, classify domain | exactly one of `modules/artifact.md`, `modules/decision.md`, `modules/execution.md`, `modules/combined.md` |
-| **BEFORE PERSISTENT STATE CHANGE** | run K4; invoke `modules/rollback.md`, then act |
-| **OUTSIDE-ENVELOPE ALTERNATIVE DETECTED** | K3 stops implementation; `modules/proposal.md` |
-| **NO VERIFIED PROGRESS** or repeated information-only outcomes | `modules/stall-or-replan.md` |
-| **BEFORE FINAL RESPONSE** or any completion claim | `modules/completion.md`, **unconditionally** |
+| `r` progress | `advanced` (verified, in-frame) / `neutral` / `regressed` |
+| `i` information | `decision-changing` / `decision-constraining` / `none` |
+| `δ` surprise | `better` / `as` / `worse` than the `expect` you wrote |
 
-Domain choice: artifact → `modules/artifact.md`; decision without tool execution
-→ `modules/decision.md`; coding or tool execution → `modules/execution.md`;
-deciding then executing → `modules/combined.md`. Mixed work takes combined.
+No prior `expect` → `δ: unscorable`. Never score surprise in hindsight.
 
-Auditable floor, kept in the process channel: one envelope block, one
-`expect[r]:` line before the first production step (`expect[i]:` only when
-material), one cell placement per outcome, and a per-item gate walk before
-delivering. Without a prior `expect`, record `δ: unscorable`, never hindsight.
+## What the readings select
 
-Write these on their own lines, values fixed by `reference/matrix.md`:
+- `r advanced` + `δ as` → calibrated. Continue, with less ceremony.
+- `r neutral` + `i` high → **apply** what you learned next; do not gather more.
+- `r neutral` + `i none` → stall. Change approach; repeating the method is not persistence.
+- `r regressed` → restore first. Never trade a regression for information.
+- `δ worse` twice on one goal → the method is wrong, not the effort.
 
-    imp: 1 | 2 | 3 | 4 | 5
-    due: YYYY-MM-DD | none
-    cell[C]: inside | outside
-    cell[r]: advanced | neutral | regressed
-    cell[i]: decision-changing | decision-constraining | none
+## Stakes
 
-Writing it is placing it; `cell[C]: outside` routes to `proposal.md`.
+`imp: 1-5`, default 3. Propose it from what you already know, show what you read,
+and let the user correct it; at 4-5 wait for their word. Importance does
+one thing: it raises **how hard the evidence has to be to fake.**
 
-## Mid-task entry
+- `imp 1-2` — any check you ran counts.
+- `imp 3` — a check you did not hand-fit to.
+- `imp 4-5` — an independent or held-out check, and every load-bearing fact
+  verified at its source rather than recalled.
 
-Reconstruct the envelope without broadening it; list each requirement as
-met-with-evidence, unmet, or unknown; invoke the domain adapter now; scan for
-pending proposals implied by work already done; then continue at the routing
-table. Do not invent earlier predictions.
+A deadline changes pace. It never lowers the evidence bar.
 
-## Reference documentation — not loaded at activation
+## Out of frame
 
-`reference/matrix.md` (the 18-cell outcome frame, calibration table, and the
-`imp` evidence bar) and `reference/quantities.md` (full `r`/`i`/`δ` theory) are
-design documentation. Read them only when a module directs you to, or on dispute.
+A better idea outside the frame is a proposal, never a substitution. Say it in
+one line, keep going, do not build it.
 
-## Composition
+Process records stay out of the deliverable.
 
-While DopaKernel is active it is the canonical source of the envelope,
-completion gate, process channel, and proposal channel. Other workflows may
-supply domain-specific execution steps only when they do not conflict with
-K1–K7. Do not run duplicate control loops.
+Reference only, not loaded: `~/.claude/skills/dopa-kernel-legacy/` holds the v0.1
+routed architecture, the 18-cell frame, and the research grounding.
