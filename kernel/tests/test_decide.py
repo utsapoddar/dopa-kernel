@@ -4,6 +4,7 @@ from pathlib import Path
 K = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(K))
 import decide  # noqa: E402
+import gate_decide as decide_gate  # noqa: E402
 
 
 def cand(cid, cost, upside, confidence, recoverable=True, reducible=False):
@@ -196,3 +197,37 @@ class TestGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestShellWritesAreWork(unittest.TestCase):
+    """C02 routed a write through Bash after a permission denial and thereby
+    skipped selection entirely. Shell writes must be gated like any other."""
+
+    def work(self, command):
+        return decide_gate.is_work("Bash", {"command": command})
+
+    def test_redirects_are_work(self):
+        for c in ("cat > app.py <<'EOF'\nx\nEOF", "echo x >> app.py",
+                  "printf 'x' > src/main.py"):
+            self.assertTrue(self.work(c), c)
+
+    def test_in_place_editors_are_work(self):
+        for c in ("sed -i '' 's/a/b/' app.py", "tee app.py < /tmp/x",
+                  "cp /tmp/new.py app.py", "python3 -c \"open('a.py','w').write('x')\""):
+            self.assertTrue(self.work(c), c)
+
+    def test_mentioning_tmp_does_not_excuse_writing_a_real_file(self):
+        self.assertTrue(self.work("cp /tmp/patched.py src/main.py"))
+        self.assertTrue(self.work("tee src/main.py < /tmp/x"))
+
+    def test_reads_and_pipes_are_not_work(self):
+        for c in ("cat app.py", "grep -n x app.py", "ls -la",
+                  "pytest -q 2>&1 | tail -5", "shasum -a 256 app.py",
+                  "python3 -m pytest -q > /dev/null"):
+            self.assertFalse(self.work(c), c)
+
+    def test_writing_the_decision_record_is_still_exempt(self):
+        for c in ("cat > .dopa/candidates.json <<'EOF'\n{}\nEOF",
+                  "cat > candidates.json <<'EOF'\n{}\nEOF",
+                  "cat > process-notes.md <<'EOF'\nx\nEOF"):
+            self.assertFalse(self.work(c), c)

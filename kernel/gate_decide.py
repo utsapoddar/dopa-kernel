@@ -16,17 +16,36 @@ Exit 2 blocks and stderr is the reason. Fails open on any error.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import decide  # noqa: E402
 
+SELECTOR = Path(__file__).resolve().parent / "decide.py"
+
 SKILL_NAME = "dopa-kernel"
 MUTATORS = {"Write", "Edit", "NotebookEdit"}
 DESTRUCTIVE = ("rm ", "rm -", "git push", "git reset --hard", "git clean",
                "drop table", "truncate", "shutdown", "mkfs", "dd if=")
-EXEMPT = (decide.STATE_DIR, "candidates.json")
+# Writing through the shell is still writing. C02 in the 2026-08-20 run hit a
+# permission denial on Edit, said "routing the same write through Bash", and in
+# doing so walked past a gate that only looked at Write/Edit and destructive
+# commands. Selection has to precede ALL work, not just dangerous work.
+_WRITES = re.compile(
+    r"(?<![0-9&])>{1,2}\s*(?!&)(?!/dev/null)(?!/dev/stderr)\S"   # redirects
+    r"|\btee\b"
+    r"|\bsed\b[^|]*-i"
+    r"|\b(cp|mv|install)\b[^|]*\s\S+\s\S+"
+    r"|\bpatch\b|\bapply_patch\b"
+    r"|\bpython3?\s+-c\b[^|]*(open\(|write_text|Path\()")
+# Split deliberately: a substring match against the whole command is far too
+# generous -- "/tmp/" anywhere in a command would have excused a write to a real
+# source file elsewhere in the same line.
+EXEMPT_PATH = (decide.STATE_DIR, "candidates.json", "process-notes",
+               "/tmp/", "/private/tmp/")
+EXEMPT_CMD = (decide.STATE_DIR, "candidates.json", "process-notes", "decide.py")
 
 
 def kernel_active(path: str) -> bool:
@@ -56,13 +75,15 @@ def is_work(tool: str, tool_input: dict) -> bool:
     """Does this call change the world, rather than look at it or record a decision?"""
     target = str(tool_input.get("file_path") or "")
     command = str(tool_input.get("command") or "")
-    if any(marker in target or marker in command for marker in EXEMPT):
+    if target and any(marker in target for marker in EXEMPT_PATH):
         return False
-    if "decide.py" in command:
+    if command and any(marker in command for marker in EXEMPT_CMD):
         return False
     if tool in MUTATORS:
         return True
-    return tool == "Bash" and any(d in command for d in DESTRUCTIVE)
+    if tool != "Bash":
+        return False
+    return any(d in command for d in DESTRUCTIVE) or bool(_WRITES.search(command))
 
 
 def decision_fault(cwd: str | None) -> str | None:
@@ -71,7 +92,7 @@ def decision_fault(cwd: str | None) -> str | None:
         return ("no path selected. Enumerate the candidate ways to reach the goal, "
                 "score each on cost/upside/confidence (1-5), whether its failure is "
                 "recoverable, and whether its uncertainty is cheaply reducible, then "
-                "run `kernel/decide.py select <file>`. You do not pick; the rule does.")
+                f"run `python3 {SELECTOR} select <file>`. You do not pick; the rule does.")
     recomputed = decide.choose(record.get("candidates", []), record.get("closed", []))
     if (recomputed["verdict"] != record.get("verdict")
             or recomputed["path"] != record.get("path")):
