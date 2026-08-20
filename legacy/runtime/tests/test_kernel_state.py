@@ -300,3 +300,27 @@ class TestStakesParsing(unittest.TestCase):
         kernel_state._scan_text(st, 40, "imp: 5\n")
         self.assertEqual(st.importance(), 5)
         self.assertEqual(st.importance_declared_at(), 7)
+
+
+class TestMalformedRecords(unittest.TestCase):
+    def parse_lines(self, lines):
+        import tempfile, os
+        fd, path = tempfile.mkstemp(suffix=".jsonl")
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        try:
+            return kernel_state.parse(path)
+        finally:
+            os.remove(path)
+
+    def test_string_message_does_not_crash_the_parser(self):
+        st = self.parse_lines([
+            '{"type":"system","message":"compact boundary"}',
+            '{"type":"assistant","message":{"role":"assistant","content":['
+            '{"type":"tool_use","name":"Skill","input":{"skill":"dopa-kernel"}}]}}',
+        ])
+        self.assertTrue(st.active)
+
+    def test_null_and_missing_message_are_skipped(self):
+        st = self.parse_lines(['{"type":"result"}', '{"type":"system","message":null}'])
+        self.assertFalse(st.active)
