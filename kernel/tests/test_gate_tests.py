@@ -1,95 +1,96 @@
-import json, os, subprocess, sys, tempfile, unittest
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
 from pathlib import Path
 
-GATE = str(Path(__file__).resolve().parents[1] / "gate_tests.py")
+K = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(K))
+import evaluator  # noqa: E402
+import model  # noqa: E402
+
+GATE = K / "gate_tests.py"
 
 
-def trace(*records):
-    fd, path = tempfile.mkstemp(suffix=".jsonl")
-    with os.fdopen(fd, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
-    return path
+def contract():
+    return {
+        "objective": "Finish from evidence", "imp": 2, "constraints": [],
+        "requirements": [{"id": "artifact", "text": "Artifact is done", "priority": 5,
+                          "verify": {"kind": "file", "path": "artifact.txt",
+                                     "contains": ["done"], "level": "observed"}}],
+    }
 
 
-def activate():
-    return {"message": {"role": "assistant", "content": [
-        {"type": "tool_use", "name": "Skill", "id": "s0", "input": {"skill": "dopa-kernel"}}]}}
+class CompletionGateTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.trace = self.root / "trace.jsonl"
+        self.trace.write_text(json.dumps({"message": {"role": "assistant", "content": [
+            {"type": "tool_use", "name": "Skill", "input": {"skill": "dopa-kernel"}}
+        ]}}) + "\n")
 
+    def gate(self, *, active=True):
+        payload = {"cwd": str(self.root),
+                   "transcript_path": str(self.trace) if active else str(self.root / "missing")}
+        return subprocess.run([sys.executable, str(GATE)], input=json.dumps(payload),
+                              capture_output=True, text=True)
 
-def run(cmd, output, tid="t1", is_error=False):
-    return (
-        {"message": {"role": "assistant", "content": [
-            {"type": "tool_use", "name": "Bash", "id": tid, "input": {"command": cmd}}]}},
-        {"message": {"role": "user", "content": [
-            {"type": "tool_result", "tool_use_id": tid, "is_error": is_error,
-             "content": output}]}},
-    )
+    def start(self):
+        return model.start_goal(contract(), self.root)
 
+    def test_active_kernel_without_goal_contract_blocks(self):
+        result = self.gate()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("no goal", result.stderr)
 
-def gate(*records):
-    path = trace(*records)
-    try:
-        p = subprocess.run([sys.executable, GATE], input=json.dumps({"transcript_path": path}),
-                           capture_output=True, text=True)
-        return p.returncode, p.stderr
-    finally:
-        os.remove(path)
+    def test_missing_receipt_blocks_even_without_a_test_runner(self):
+        self.start()
+        result = self.gate()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("missing evidence", result.stderr)
 
+    def test_fake_passing_summary_does_not_authorize_completion(self):
+        self.start()
+        with self.trace.open("a") as stream:
+            stream.write(json.dumps({"message": {"content": [
+                {"type": "tool_use", "name": "Bash", "id": "x",
+                 "input": {"command": "echo '5 passed' # pytest"}},
+                {"type": "tool_result", "tool_use_id": "x", "content": "5 passed"},
+            ]}}) + "\n")
+        self.assertEqual(self.gate().returncode, 2)
 
-class TestTestGate(unittest.TestCase):
-    def test_failing_pytest_blocks(self):
-        rc, err = gate(activate(), *run("pytest -q", "FF.\n3 failed, 2 passed in 0.02s"))
-        self.assertEqual(rc, 2)
-        self.assertIn("3 failed", err)
+    def test_fresh_receipt_allows_stop_and_finalizes_goal(self):
+        self.start()
+        (self.root / "artifact.txt").write_text("done\n")
+        evaluator.verify_requirement(self.root, "artifact")
+        result = self.gate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(model.load_state(self.root)["status"], "complete")
 
-    def test_shell_exit_zero_does_not_mask_failure(self):
-        # a shell that successfully runs a failing suite reports is_error False
-        rc, _ = gate(activate(), *run("pytest -q", "1 failed, 4 passed", is_error=False))
-        self.assertEqual(rc, 2)
+    def test_passing_receipt_then_edit_is_stale_and_blocks(self):
+        self.start()
+        (self.root / "artifact.txt").write_text("done\n")
+        evaluator.verify_requirement(self.root, "artifact")
+        model.record_mutation(self.root, "Edit")
+        result = self.gate()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("stale evidence", result.stderr)
 
-    def test_passing_pytest_allows(self):
-        rc, _ = gate(activate(), *run("pytest -q", "5 passed in 0.01s"))
-        self.assertEqual(rc, 0)
+    def test_repeated_blocks_never_age_into_permission(self):
+        self.start()
+        for _ in range(4):
+            self.assertEqual(self.gate().returncode, 2)
 
-    def test_last_run_wins_when_failure_is_fixed(self):
-        rc, _ = gate(activate(),
-                     *run("pytest -q", "2 failed, 3 passed", tid="a"),
-                     *run("pytest -q", "5 passed in 0.01s", tid="b"))
-        self.assertEqual(rc, 0)
+    def test_terminal_impossibility_allows_honest_stop(self):
+        state = self.start()
+        state["terminal_blocker"] = "Required external system no longer exists"
+        model.save_state(state, self.root)
+        self.assertEqual(self.gate().returncode, 0)
+        self.assertEqual(model.load_state(self.root)["status"], "impossible")
 
-    def test_regression_after_a_green_run_still_blocks(self):
-        rc, _ = gate(activate(),
-                     *run("pytest -q", "5 passed", tid="a"),
-                     *run("pytest -q", "1 failed, 4 passed", tid="b"))
-        self.assertEqual(rc, 2)
-
-    def test_inert_when_kernel_not_active(self):
-        rc, _ = gate(*run("pytest -q", "3 failed, 2 passed"))
-        self.assertEqual(rc, 0)
-
-    def test_no_test_run_is_not_a_failure(self):
-        rc, _ = gate(activate(), *run("ls -la", "a.py b.py"))
-        self.assertEqual(rc, 0)
-
-    def test_other_runners_are_recognised(self):
-        for cmd, out in (("cargo test", "test result: FAILED. 1 passed; 2 failed"),
-                         ("go test ./...", "--- FAIL: TestThing\nFAIL"),
-                         ("npm test", "Tests:  2 failed, 8 passed, 10 total")):
-            with self.subTest(cmd=cmd):
-                self.assertEqual(gate(activate(), *run(cmd, out))[0], 2)
-
-    def test_blocking_stops_after_the_cap(self):
-        prior = [{"message": {"role": "user", "content":
-                  "DopaKernel gate: last test run failed — x"}, "isMeta": True}] * 2
-        rc, _ = gate(activate(), *run("pytest -q", "3 failed, 2 passed"), *prior)
-        self.assertEqual(rc, 0)
-
-    def test_unreadable_transcript_fails_open(self):
-        p = subprocess.run([sys.executable, GATE],
-                           input=json.dumps({"transcript_path": "/nonexistent"}),
-                           capture_output=True, text=True)
-        self.assertEqual(p.returncode, 0)
+    def test_inert_when_kernel_is_not_active(self):
+        self.assertEqual(self.gate(active=False).returncode, 0)
 
 
 if __name__ == "__main__":

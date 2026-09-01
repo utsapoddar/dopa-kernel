@@ -1,110 +1,140 @@
 # DopaKernel
 
-A control loop for agent work, in 79 lines and two gates.
+DopaKernel is a semantic anti-premature-convergence controller for agent work.
+It keeps the user's objective stable, allocates the next action from explicit
+progress and information state, and refuses completion until every requirement
+has fresh structured evidence.
 
-The idea comes from dopamine as a *prediction-error* signal: not a score of how
-good something is, but the gap between what you expected and what happened — and
-that gap is what should change behaviour. Two things follow, and they are the
-whole design.
+The name comes from dopamine as prediction error: behavior should change from
+the gap between `expect` and `got`, not from the model's confidence that it is
+probably finished.
 
-**You do not pick the path.** Enumerate the ways you infer could reach the goal,
-score each on cost, upside and confidence, say whether its failure is recoverable
-and whether its uncertainty is cheaply reducible, and a program applies the rule.
-**You do not decide you are finished.** If the last thing you ran failed, the
-turn does not end.
+## What changed
 
-## What's here
+The original lean kernel had two sound ideas: do not let prose choose the path,
+and do not let a failing observation become victory. Its implementation was too
+narrow: it remembered one selection, parsed the last recognizable test summary,
+and allowed several shell and path exemptions. Semantic fields (`C`, `r`, `i`,
+`δ`, `imp`) did not control runtime decisions.
 
-- `SKILL.md` — the kernel: the loop, the three readings (`r` progress, `i`
-  information, `δ` surprise), and the `imp` stakes scale, where importance does
-  exactly one thing — it raises how hard the evidence has to be to fake.
-- `kernel/decide.py` — path selection and abandonment, computed rather than
-  asserted.
-- `kernel/gate_decide.py` — `PreToolUse`. No work until the rule has chosen. It
-  **recomputes** the rule from the inputs stored in the record, so a hand-edited
-  record claiming a different winner is rejected.
-- `kernel/gate_tests.py` — `Stop`. Refuses to end a turn when the last test run
-  failed, read from the runner's own summary rather than the shell exit code,
-  because a shell that successfully runs a failing suite exits 0.
-- `legacy/` — the v0.1 routed architecture, preserved. See its README.
+The current controller connects those ideas end to end:
 
-## The selection rule
+- `kernel/model.py` — validated, goal-scoped `.dopa/goal.json`, frozen
+  requirements, atomic state, mutation generations, attempts, and closed paths.
+- `kernel/policy.py` — deterministic action selection with hard envelope and
+  regression constraints, requirement priority, progress-first behavior, and
+  decision-critical `reduce-first` research.
+- `kernel/evaluator.py` — exact command/file verifiers, evidence receipts, and
+  independent `met / not_met / impossible` completion decisions.
+- `kernel/decide.py` — `start`, `select`, `outcome`, `verify`, `evaluate`, and
+  `status` CLI.
+- `kernel/gate_decide.py` — Claude PreToolUse gate. Exact control commands are
+  exempt; unknown shell commands are mutations; authorization is locked and
+  later mutations stale earlier evidence.
+- `kernel/gate_tests.py` — compatibility-named Claude Stop gate. It reads the
+  evaluator, never transcript test-like prose.
+- `legacy/` — preserved v0.1 routed architecture and 18-cell research frame.
 
-Applied in order, by `decide.py`:
+The matrix is not redundant: its semantic dimensions remain useful. The
+mandatory module-reading and self-authored paperwork around it were redundant.
 
-1. **Unrecoverable failure is eligible only when nothing recoverable exists.**
-   Upside never buys back a loss you cannot undo.
-2. **Low confidence plus cheaply reducible uncertainty returns `reduce-first`**
-   rather than a path — go look, then select again. If the second selection
-   picks what the first would have picked anyway, that research was `i: none`
-   and it says so.
-3. **Otherwise, best expected value per unit cost.** This is why the cheap
-   untested option usually beats the safe expensive one: when failure is
-   recoverable, a cheap failure is a cheap experiment, and the safe path teaches
-   you nothing. Dividing by cost stops a cost-1 lottery ticket winning on
-   cheapness alone.
+## Minimal workflow
 
-Abandonment is a count, not resolve: two consecutive worse-than-expected
-outcomes close a path, the gate then refuses further work on it, and the next
-selection must exclude it.
+Use absolute paths to the controller while keeping the target workspace as cwd:
 
-The agent supplies the scores — that is inference and cannot be mechanised. It
-does not supply the answer.
+```sh
+python3 /path/to/dopa-kernel/kernel/decide.py start /tmp/dopa-goal.json
+python3 /path/to/dopa-kernel/kernel/decide.py select /tmp/dopa-candidates.json
+# make one authorized mutation, observe it
+python3 /path/to/dopa-kernel/kernel/decide.py outcome /tmp/dopa-outcome.json
+python3 /path/to/dopa-kernel/kernel/decide.py verify requirement-id
+python3 /path/to/dopa-kernel/kernel/decide.py evaluate
+```
 
-## Why it is this small
+See [`reference/goal-contract.md`](reference/goal-contract.md) for both schemas
+and the exact evidence semantics.
 
-v0.1 was 106 kernel lines, eight modules, two reference documents and four
-gates. Against a matched no-controller baseline on five objectively verified
-coding probes, judged by a held-out oracle suite:
+## How this composes with `/goal`
 
-| | result |
+`/goal` and DopaKernel solve different layers of the same failure mode:
+
+| Layer | Responsibility |
 |---|---|
-| baseline, no controller | **5/5** |
-| v0.1, seven rules and eight modules | **2/5** |
-| this kernel | **4/5** |
+| Codex `/goal` | Thread-persistent objective, continuation turns, a requirement-by-requirement completion-audit prompt, usage accounting, and user lifecycle controls |
+| Claude `/goal` | Session goal restored on resume, driven by a prompt-based Stop hook whose separate small model reads the conversation and returns not-yet/met/impossible |
+| DopaKernel | Requirement decomposition, semantic action allocation, path closure, frozen verification, and fresh-evidence completion |
 
-v0.1 did not merely fail to help; it did measurably worse than nothing, using
-three to four times the turns. The cause was structural. Every one of its four
-gates checked whether a file had been read or a line had been typed — artefacts
-the agent authors itself. So its completion gate fired in all five treatment
-sessions, including all three failures, and one session recorded
-`cell[r]: advanced` on code failing three of five visible tests.
+For Codex, keep the platform goal and Dopa objective identical; Codex supplies
+continuation while Dopa supplies policy and evidence. For Claude, install the
+Dopa hooks so the Stop decision uses structured receipts rather than inferred
+test summaries. DopaKernel does not call a second external model API.
 
-Replayed against those same traces, `gate_tests.py` fires on exactly the three
-that failed and stays silent on the two that passed.
+The lesson is **not** to duplicate platform loop machinery. Codex already tells
+the worker not to shrink the objective and to audit every requirement before
+calling its completion tool. Claude already uses a fresh model rather than the
+worker for the terminal decision, but that evaluator cannot run tools and only
+sees what the worker surfaced. DopaKernel fills the remaining gap:
+deterministic semantic selection plus verifier receipts tied to post-mutation
+state.
 
-The lesson is not that rules do not work. It is that a rule nothing can check is
-a suggestion, and suggestions cost context.
+Current primary references:
 
-## Install
+- [Codex Goal mode release](https://learn.chatgpt.com/docs/changelog) and
+  [v0.147.0 continuation contract](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/ext/goal/templates/goals/continuation.md)
+- [Codex v0.147.0 goal tool contract](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/ext/goal/src/spec.rs)
+- [Claude Code `/goal` documentation](https://code.claude.com/docs/en/goal)
 
+## Install for Claude Code
+
+Keep one source of truth. Clone or place this repository at a stable path, then
+link the whole skill rather than copying only `SKILL.md`:
+
+```sh
+ln -s /absolute/path/to/dopa-kernel ~/.claude/skills/dopa-kernel
 ```
-cp SKILL.md ~/.claude/skills/dopa-kernel/SKILL.md
-```
 
-Then register both gates in `~/.claude/settings.json`:
+Register the stable absolute hook paths in `~/.claude/settings.json`:
 
 ```json
-"PreToolUse": [{"matcher": "Write|Edit|NotebookEdit|Bash",
-  "hooks": [{"type": "command",
-             "command": "python3 /path/to/dopa-kernel/kernel/gate_decide.py"}]}],
-"Stop": [{"matcher": "*",
-  "hooks": [{"type": "command",
-             "command": "python3 /path/to/dopa-kernel/kernel/gate_tests.py"}]}]
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Write|Edit|NotebookEdit|Bash",
+      "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_decide.py"}]
+    }],
+    "Stop": [{
+      "matcher": "*",
+      "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_tests.py"}]
+    }]
+  }
+}
 ```
 
-Activate with `Dopa mode` in a prompt. Tests: `sh kernel/tests/structure.sh`
-and `cd kernel && python3 -m unittest discover -s tests`.
+Activate only with `Dopa mode` or explicit `dopa-kernel` invocation.
 
-## Limits, stated plainly
+## Verification
 
-- **The scores are not checked.** Rate a doomed path confidence 5 and the rule
-  faithfully picks it. What catches that is the outcome counter closing it after
-  two failures — recovery, not prevention.
-- **`gate_tests.py` only covers work that runs tests.** Writing and pure
-  decision tasks have no unauthored observation to read, so there the kernel is
-  advice. Adding rules would not change that.
-- **4/5 still loses to 5/5.** On this evidence the kernel has gone from harmful
-  to roughly break-even on coding. It has not been shown to help.
-- The five probes above were scored under v0.1 and are burned: they are
-  development evidence and cannot support an effectiveness claim.
+```sh
+sh kernel/tests/structure.sh
+cd kernel && python3 -m unittest discover -s tests -v
+cd ../legacy && sh tests/structure.sh
+cd runtime && python3 -m unittest discover -s tests -v
+```
+
+These tests establish structural and deterministic mechanism behavior, including
+the historical bypass cases. They do **not** establish that DopaKernel improves
+real-world agent success rates.
+
+## Evidence boundary and limits
+
+- Candidate semantics and evidence-level labels originate in the goal contract;
+  deterministic code validates and applies them but cannot prove the judgments
+  were wise. At high stakes, make independence concrete and user-visible.
+- The shell classifier is conservative, not a full shell interpreter. Unknown
+  commands are treated as mutations, verifier commands use a read-only
+  allowlist, and active controller errors fail closed.
+- A previous README reported `4/5` from a small replay. That was development
+  evidence, not a valid effectiveness result, and is not retained as a claim.
+- The current public claim is mechanical only: the controller blocks the tested
+  premature-completion and authorization bypasses. Behavioral effectiveness
+  still requires a fresh, preregistered evaluation on unburned tasks.

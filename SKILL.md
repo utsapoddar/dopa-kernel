@@ -5,75 +5,91 @@ description: Use only when the user explicitly says `Dopa mode` or invokes `dopa
 
 # DopaKernel
 
-A control loop, not a procedure. Six moves. Everything else is reference.
+Prevent premature victory by keeping the objective stable, choosing work from
+semantic task state, and requiring fresh evidence from outside the final prose.
 
-> Dopa mode: Work carefully and persist until the result satisfies every stated requirement.
+> Dopa mode: persist until every stated requirement has current evidence, or a
+> real external blocker makes the objective impossible.
 
-## Choose the path before framing the work
+The controller is `kernel/decide.py` beside this file. Invoke it with its
+absolute path; the current directory must remain the target workspace.
 
-You do not pick the path. Enumerate the ways you infer could reach the goal —
-two or twenty — and score each 1-5 on `cost`, `upside`, `confidence`, plus
-whether its failure is **recoverable** and whether its uncertainty is **cheaply
-reducible**. Then run `kernel/decide.py select <file>` and do what it returns.
-`reduce-first` means go look before building. Guessing the scores is your job;
-choosing between them is not, and the gate recomputes the rule from your own
-numbers, so a record that claims a different winner is rejected.
+## 1. Frame a durable goal
 
-After each attempt run `kernel/decide.py outcome better|as|worse`. Two
-consecutive `worse` on one path closes it: re-select, do not keep repairing.
+**Frame.** Translate the user's exact objective into a visible goal contract:
+requirements, constraints, `imp: 1-5`, and a frozen verifier per requirement.
+Do not silently broaden, narrow, or substitute the objective. At `imp 4-5`,
+show the evidence bar and wait for the user's agreement.
 
-## The loop
+Write the input as `/tmp/dopa-goal.json`, then run:
 
-1. **Frame.** Write what done means, what is off-limits, and `imp`. Once, before acting.
-2. **Predict.** Write `expect:` — what you think the next action will produce.
-3. **Act.**
-4. **Observe.** Run it. Read the output. An observation is something the
-   environment produced; an assertion is something you produced. "It should
-   work", "the change is complete", and a remembered count are assertions.
-5. **Compare.** Write `got:` with the three readings. The gap between `expect`
-   and `got` is the entire signal — that gap is the only thing worth tracking.
-6. **Never claim done against a failing observation.** If the last thing you ran
-   failed, you are not done, however good the rest looks.
+```text
+python3 <dopa-kernel>/kernel/decide.py start /tmp/dopa-goal.json
+```
 
-## The readings
+An unfinished goal cannot be overwritten. See `reference/goal-contract.md`.
 
-Keep them separate. Never sum them, never trade one for another.
+## 2. Select the next semantic action
 
-| | values |
-|---|---|
-| `r` progress | `advanced` (verified, in-frame) / `neutral` / `regressed` |
-| `i` information | `decision-changing` / `decision-constraining` / `none` |
-| `δ` surprise | `better` / `as` / `worse` than the `expect` you wrote |
+Enumerate candidates tied to one unmet `requirement_id`. Each candidate declares
+envelope membership, expected `r` and `i`, confidence, bounded cost,
+recoverability, and whether reducible uncertainty is decision-critical. Write
+them to `/tmp/dopa-candidates.json`, then run `decide.py select` on that file.
 
-No prior `expect` → `δ: unscorable`. Never score surprise in hindsight.
+You infer candidate fields; you do not pick the winner. The policy applies hard
+constraints and requirement priority first. Credible progress beats research.
+`reduce-first` is valid only when uncertainty could change the action choice.
+An out-of-frame idea is a proposal, never a substitution.
 
-## What the readings select
+## 3. Run one prediction-error cycle
 
-- `r advanced` + `δ as` → calibrated. Continue, with less ceremony.
-- `r neutral` + `i` high → **apply** what you learned next; do not gather more.
-- `r neutral` + `i none` → stall. Change approach; repeating the method is not persistence.
-- `r regressed` → restore first. Never trade a regression for information.
-- `δ worse` twice on one goal → the method is wrong, not the effort.
+1. **Predict.** State `expect:` for the selected action.
+2. **Act.** Make one bounded production mutation.
+3. **Observe.** Inspect environment output; prose and remembered counts are not evidence.
+4. **Compare.** Record `got:` and keep the readings separate:
+   - `r` progress: `advanced / neutral / regressed`
+   - `i` information: `decision-changing / decision-constraining / none`
+   - `δ` surprise: `better / as / worse`
+5. Write `/tmp/dopa-outcome.json` with the observed `r`, `i`, `delta`, and an
+   optional `note`; run `decide.py outcome /tmp/dopa-outcome.json` before
+   another mutation. The action is consumed, so re-select next.
 
-## Stakes
+Never sum them or trade progress for information. No prior `expect` makes `δ`
+unscorable. Two genuinely consecutive `worse` outcomes close the path;
+re-selection does not erase the history. Restore a known regression first.
 
-`imp: 1-5`, default 3. Propose it from what you already know, show what you read,
-and let the user correct it; at 4-5 wait for their word. Importance does
-one thing: it raises **how hard the evidence has to be to fake.**
+## 4. Verify requirements, not confidence
 
-- `imp 1-2` — any check you ran counts.
-- `imp 3` — a check you did not hand-fit to.
-- `imp 4-5` — an independent or held-out check, and every load-bearing fact
-  verified at its source rather than recalled.
+Run `decide.py verify <requirement_id>`. It executes the verifier frozen in the
+goal contract and stores a receipt with verifier identity, result, digest,
+evidence level, and mutation generation. Any later production mutation makes
+older receipts stale, so re-verify them.
 
-A deadline changes pace. It never lowers the evidence bar.
+Importance only raises the minimum evidence level:
 
-## Out of frame
+- `imp 1-2`: `observed`
+- `imp 3`: `independent`
+- `imp 4-5`: `held-out`
 
-A better idea outside the frame is a proposal, never a substitution. Say it in
-one line, keep going, do not build it.
+Urgency never lowers this floor. Information without a passing receipt cannot
+complete a requirement.
 
-Process records stay out of the deliverable.
+## 5. Let the evaluator decide completion
 
-Reference only, not loaded: `~/.claude/skills/dopa-kernel-legacy/` holds the v0.1
-routed architecture, the 18-cell frame, and the research grounding.
+Run `decide.py evaluate`. Its terminal verdicts are `met / not_met / impossible`.
+
+- `met`: every requirement has a fresh, sufficiently strong passing receipt and
+  no known regression.
+- `not_met`: continue with the named requirement; re-select when needed.
+- `impossible`: stop only for an externally established terminal blocker, never
+  because attempts are inconvenient or the context is long. Record its reason
+  and evidence in `/tmp/dopa-blocker.json`, then run `decide.py block` on it.
+
+Do not declare victory before `met`. Claude's Stop hook enforces this evaluator;
+Codex `/goal` can provide durable continuation while this kernel supplies
+semantic allocation and evidence policy. Platform `/goal` never overrides the
+user-visible Dopa goal contract.
+
+Keep process state in `.dopa/`, never in the deliverable. The legacy 18-cell
+matrix remains reference material; its semantic dimensions are useful, but its
+mandatory module-reading ceremony is not part of this runtime.
