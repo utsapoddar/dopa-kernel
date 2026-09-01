@@ -87,11 +87,15 @@ Current primary references:
 ## Install for Claude Code
 
 Keep one source of truth. Clone or place this repository at a stable path, then
-link the whole skill rather than copying only `SKILL.md`:
+link its loader adapter. Do not link the repository root: recursive skill
+discovery may otherwise expose `legacy/SKILL.md` as a duplicate active skill.
 
 ```sh
-ln -s /absolute/path/to/dopa-kernel ~/.claude/skills/dopa-kernel
+ln -s /absolute/path/to/dopa-kernel/adapters/claude ~/.claude/skills/dopa-kernel
 ```
+
+The adapter routes the agent to the canonical root `SKILL.md`; it contains no
+independent behavioral copy.
 
 Register the stable absolute hook paths in `~/.claude/settings.json`:
 

@@ -44,6 +44,8 @@ has "$ROOT/kernel/gate_decide.py" 'Unknown shell commands are mutations' "unknow
 has "$ROOT/kernel/gate_tests.py" 'never' "stop gate rejects transcript prose"
 has "$ROOT/kernel/gate_tests.py" 'evaluator.evaluate' "stop routes to evaluator"
 exists "$ROOT/reference/goal-contract.md" "goal contract reference exists"
+exists "$ROOT/adapters/claude/SKILL.md" "Claude loader adapter exists"
+has "$ROOT/adapters/claude/SKILL.md" '../../SKILL.md' "adapter routes to canonical skill"
 exists "$ROOT/legacy/README.md" "legacy preserved for reference"
 
 printf '\n%d passed; %d failed\n' "$PASS" "$FAIL"
