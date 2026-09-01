@@ -83,9 +83,13 @@ class CompletionGateTest(unittest.TestCase):
             self.assertEqual(self.gate().returncode, 2)
 
     def test_terminal_impossibility_allows_honest_stop(self):
-        state = self.start()
-        state["terminal_blocker"] = "Required external system no longer exists"
-        model.save_state(state, self.root)
+        self.start()
+        (self.root / "provider-notice.txt").write_text("system no longer exists")
+        evaluator.record_terminal_blocker(self.root, {
+            "reason": "Required external system no longer exists",
+            "evidence": {"kind": "file", "path": "provider-notice.txt",
+                         "contains": ["no longer exists"]},
+        })
         self.assertEqual(self.gate().returncode, 0)
         self.assertEqual(model.load_state(self.root)["status"], "impossible")
 

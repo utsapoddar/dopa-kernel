@@ -88,9 +88,11 @@ class CLITest(unittest.TestCase):
 
     def test_external_terminal_blocker_has_a_supported_transition(self):
         self.run_cli("start", "goal.json")
+        (self.root / "provider-notice.txt").write_text("API permanently retired\n")
         (self.root / "blocker.json").write_text(json.dumps({
             "reason": "The required API was permanently retired",
-            "evidence": "Provider deprecation notice",
+            "evidence": {"kind": "file", "path": "provider-notice.txt",
+                         "contains": ["permanently retired"]},
         }))
         result = self.run_cli("block", "blocker.json")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -98,6 +100,20 @@ class CLITest(unittest.TestCase):
         self.assertEqual(evaluated.returncode, 3)
         self.assertEqual(json.loads((self.root / ".dopa/goal.json").read_text())["status"],
                          "impossible")
+
+    def test_user_authorized_cancel_and_reframe(self):
+        self.assertEqual(self.run_cli("start", "goal.json").returncode, 0)
+        (self.root / "cancel.json").write_text(json.dumps({
+            "reason": "The user changed the objective", "user_authorized": True,
+        }))
+        cancelled = self.run_cli("cancel", "cancel.json")
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+        self.assertEqual(json.loads((self.root / ".dopa/goal.json").read_text())["status"],
+                         "cancelled")
+
+        replacement = dict(goal(), objective="Create a different artifact")
+        (self.root / "replacement.json").write_text(json.dumps(replacement))
+        self.assertEqual(self.run_cli("start", "replacement.json").returncode, 0)
 
 
 if __name__ == "__main__":

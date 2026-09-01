@@ -6,6 +6,7 @@
     decide.py outcome <observation.json>
     decide.py verify <requirement-id>
     decide.py block <blocker.json>
+    decide.py cancel <cancel.json>
     decide.py evaluate
     decide.py status
 """
@@ -57,8 +58,14 @@ def cmd_verify(requirement_id: str) -> int:
 
 
 def cmd_block(path: str) -> int:
-    state = model.record_terminal_blocker(_read_json(path))
+    state = evaluator.record_terminal_blocker(None, _read_json(path))
     print(f"terminal blocker recorded for {state['goal_id']}")
+    return 0
+
+
+def cmd_cancel(path: str) -> int:
+    state = model.cancel_goal(_read_json(path))
+    print(f"cancelled: {state['cancelled_goal_id']} — {state['cancel_reason']}")
     return 0
 
 
@@ -98,6 +105,8 @@ def main(argv: list[str]) -> int:
             return cmd_verify(argv[1])
         if len(argv) == 2 and argv[0] == "block":
             return cmd_block(argv[1])
+        if len(argv) == 2 and argv[0] == "cancel":
+            return cmd_cancel(argv[1])
         if len(argv) == 1 and argv[0] == "evaluate":
             return cmd_evaluate()
         if len(argv) == 1 and argv[0] == "status":
@@ -108,7 +117,7 @@ def main(argv: list[str]) -> int:
     print(
         "usage: decide.py start <goal.json> | select <candidates.json> | "
         "outcome <observation.json> | verify <requirement-id> | "
-        "block <blocker.json> | evaluate | status",
+        "block <blocker.json> | cancel <cancel.json> | evaluate | status",
         file=sys.stderr,
     )
     return 64

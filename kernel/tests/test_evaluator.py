@@ -90,16 +90,24 @@ class EvaluatorTest(unittest.TestCase):
         self.assertEqual(model.load_state(self.root)["status"], "complete")
 
     def test_terminal_external_blocker_is_impossible(self):
-        state = model.start_goal(command_contract(), self.root)
-        state["terminal_blocker"] = "Required external service was permanently removed"
-        model.save_state(state, self.root)
+        model.start_goal(command_contract(), self.root)
+        (self.root / "provider-notice.txt").write_text("service permanently removed")
+        evaluator.record_terminal_blocker(self.root, {
+            "reason": "Required external service was permanently removed",
+            "evidence": {"kind": "file", "path": "provider-notice.txt",
+                         "contains": ["permanently removed"]},
+        })
         result = evaluator.evaluate(model.load_state(self.root))
         self.assertEqual(result["verdict"], "impossible")
 
     def test_impossible_finalization_allows_a_replacement_goal(self):
-        state = model.start_goal(command_contract(), self.root)
-        state["terminal_blocker"] = "Required external service was permanently removed"
-        model.save_state(state, self.root)
+        model.start_goal(command_contract(), self.root)
+        (self.root / "provider-notice.txt").write_text("service permanently removed")
+        evaluator.record_terminal_blocker(self.root, {
+            "reason": "Required external service was permanently removed",
+            "evidence": {"kind": "file", "path": "provider-notice.txt",
+                         "contains": ["permanently removed"]},
+        })
         result = evaluator.evaluate_goal(self.root, finalize=True)
         self.assertEqual(result["verdict"], "impossible")
         self.assertEqual(model.load_state(self.root)["status"], "impossible")
@@ -124,6 +132,96 @@ class EvaluatorTest(unittest.TestCase):
         result = evaluator.evaluate(model.load_state(self.root))
         self.assertEqual(result["verdict"], "not_met")
         self.assertIn("outcome", result["reason"])
+
+    def test_forged_receipt_cannot_finalize_without_the_artifact(self):
+        contract = {
+            "objective": "Produce a checked artifact", "imp": 2, "constraints": [],
+            "requirements": [{"id": "artifact", "text": "Artifact exists", "priority": 5,
+                              "verify": {"kind": "file", "path": "missing.txt",
+                                         "contains": ["done"], "level": "observed"}}],
+        }
+        state = model.start_goal(contract, self.root)
+        verify = state["requirements"][0]["verify"]
+        state["requirements"][0]["evidence"] = {
+            "requirement_id": "artifact",
+            "verifier_id": evaluator._verifier_id(verify),
+            "passed": True,
+            "level": "observed",
+            "generation": 0,
+            "observed_at": model.now(),
+            "output_digest": "forged",
+            "summary": "forged",
+        }
+        model.save_state(state, self.root)
+
+        result = evaluator.evaluate_goal(self.root, finalize=True)
+
+        self.assertEqual(result["verdict"], "not_met")
+        self.assertEqual(model.load_state(self.root)["status"], "active")
+
+    def test_mutating_test_verifier_fails_and_advances_generation(self):
+        (self.root / "a.txt").write_text("good")
+        tests = self.root / "verifier_tests"
+        tests.mkdir()
+        (tests / "test_mutate.py").write_text(
+            "import unittest\n"
+            "from pathlib import Path\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_mutate(self):\n"
+            "        Path('a.txt').write_text('bad')\n"
+        )
+        contract = {
+            "objective": "Preserve verified work", "imp": 1, "constraints": [],
+            "requirements": [
+                {"id": "a", "text": "A stays good", "priority": 5,
+                 "verify": {"kind": "file", "path": "a.txt", "contains": ["good"],
+                            "level": "observed"}},
+                {"id": "b", "text": "Tests pass", "priority": 4,
+                 "verify": {"kind": "command",
+                            "command": "python3 -m unittest discover -s verifier_tests -q",
+                            "expect_exit": 0, "level": "observed"}},
+            ],
+        }
+        model.start_goal(contract, self.root)
+        first = evaluator.verify_requirement(self.root, "a")
+        second = evaluator.verify_requirement(self.root, "b")
+
+        self.assertTrue(first["passed"])
+        self.assertFalse(second["passed"])
+        self.assertIn("mutated workspace", second["summary"])
+        self.assertEqual(model.load_state(self.root)["mutation_generation"], 1)
+        self.assertEqual(evaluator.evaluate_goal(self.root)["verdict"], "not_met")
+
+    def test_terminal_blocker_requires_structured_verified_evidence(self):
+        model.start_goal(command_contract(), self.root)
+        with self.assertRaisesRegex(ValueError, "evidence must be a verifier"):
+            evaluator.record_terminal_blocker(
+                self.root,
+                {"reason": "I say impossible", "evidence": "I say external"},
+            )
+
+    def test_terminal_blocker_cannot_use_controller_state_as_evidence(self):
+        model.start_goal(command_contract(), self.root)
+        with self.assertRaisesRegex(ValueError, "controller state"):
+            evaluator.record_terminal_blocker(self.root, {
+                "reason": "I say impossible",
+                "evidence": {"kind": "file", "path": ".dopa/goal.json",
+                             "contains": ["Prove the work"]},
+            })
+
+    def test_regression_and_pending_outcome_precede_impossible(self):
+        state = model.start_goal(command_contract(), self.root)
+        state["known_regression"] = "broken"
+        state["selected_action"] = {"id": "work", "awaiting_outcome": True}
+        state["terminal_blocker"] = {
+            "reason": "External blocker", "evidence": {"passed": True}
+        }
+        model.save_state(state, self.root)
+
+        result = evaluator.evaluate(model.load_state(self.root))
+
+        self.assertEqual(result["verdict"], "not_met")
+        self.assertIn("regression", result["reason"])
 
 
 if __name__ == "__main__":

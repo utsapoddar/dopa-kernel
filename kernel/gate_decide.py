@@ -23,8 +23,8 @@ SKILL_NAME = "dopa-kernel"
 READ_TOOLS = {"Read", "Grep", "Glob", "LS"}
 MUTATORS = {"Write", "Edit", "NotebookEdit"}
 CONTROL_ARITY = {"start": 1, "select": 1, "outcome": 1, "verify": 1,
-                 "block": 1, "evaluate": 0, "status": 0}
-SHELL_META = re.compile(r"[;&|<>\n\r]")
+                 "block": 1, "cancel": 1, "evaluate": 0, "status": 0}
+SHELL_META = re.compile(r"[;&|<>\n\r`$()]")
 READ_COMMANDS = {
     "ls", "pwd", "cat", "head", "tail", "grep", "rg", "find", "stat", "wc",
     "diff", "shasum", "sha256sum", "file", "which", "type", "realpath",
@@ -32,11 +32,11 @@ READ_COMMANDS = {
 TEST_COMMANDS = {"pytest", "py.test", "jest", "vitest", "rspec", "phpunit", "ctest"}
 
 
-def kernel_active(path: str) -> bool:
+def kernel_active(path: str, cwd: str | None = None) -> bool:
     try:
         lines = Path(path).read_text(errors="replace").splitlines()
     except OSError:
-        return False
+        lines = []
     for line in lines:
         try:
             record = json.loads(line)
@@ -53,7 +53,11 @@ def kernel_active(path: str) -> bool:
                 and (block.get("input") or {}).get("skill") == SKILL_NAME
             ):
                 return True
-    return False
+    try:
+        state = model.load_state(cwd)
+    except ValueError:
+        return model.state_path(cwd).exists()
+    return state.get("status") == "active"
 
 
 def _script_tokens(command: str) -> list[str] | None:
@@ -145,6 +149,54 @@ def is_mutation(tool: str, tool_input: dict, cwd: str | None = None) -> bool:
     return not _known_read_command(command)
 
 
+def _path_strings(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            path_key = any(part in key.lower() for part in ("path", "file", "target", "dest", "uri"))
+            if path_key and isinstance(item, str):
+                yield item
+            yield from _path_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _path_strings(item)
+
+
+def _all_strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _all_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _all_strings(item)
+
+
+def protected_state_access(tool: str, tool_input: dict, cwd: str | None = None) -> bool:
+    """Reject tool access to state that must only move through controller commands."""
+    root = Path(cwd or ".").resolve()
+    protected = (root / model.STATE_DIR).resolve()
+    values = list(_path_strings(tool_input))
+    if tool == "Bash":
+        values.append(str(tool_input.get("command") or ""))
+    elif tool not in READ_TOOLS | MUTATORS:
+        values.extend(_all_strings(tool_input))
+    for value in values:
+        normalized = value.replace("\\", "/")
+        if model.STATE_DIR in normalized.split("/") or f"{model.STATE_DIR}/" in normalized:
+            return True
+        try:
+            candidate = Path(value)
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            resolved = candidate.resolve()
+        except (OSError, ValueError):
+            continue
+        if resolved == protected or protected in resolved.parents:
+            return True
+    return False
+
+
 def decision_fault(cwd: str | None) -> str | None:
     state = model.load_state(cwd)
     if not state:
@@ -177,11 +229,14 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
         transcript = payload.get("transcript_path") or ""
-        if not kernel_active(transcript):
+        cwd = payload.get("cwd")
+        if not kernel_active(transcript, cwd):
             return 0
         tool = payload.get("tool_name") or ""
         tool_input = payload.get("tool_input") or {}
-        cwd = payload.get("cwd")
+        if protected_state_access(tool, tool_input, cwd):
+            print("DopaKernel gate: controller state is protected; use decide.py commands", file=sys.stderr)
+            return 2
         if not is_mutation(tool, tool_input, cwd):
             return 0
         with model.state_lock(cwd):

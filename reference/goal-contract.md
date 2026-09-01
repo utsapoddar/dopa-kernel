@@ -42,14 +42,18 @@ exemption to production files.
 
 `objective`, requirement IDs, constraints, importance, and verifier definitions
 are frozen when `decide.py start` succeeds. An active goal cannot be replaced.
-A completed goal may be replaced and receives clean attempts and closed paths.
+A completed, impossible, or explicitly user-cancelled goal may be replaced and
+receives clean attempts and closed paths.
 
 Verifier kinds:
 
-- `command`: run exactly `command` in the goal workspace, require `expect_exit`
+- `command`: parse `command` into an argument vector and run it without a shell
+  in the goal workspace, require `expect_exit`
   (default `0`), and optionally require `output_contains`. Only recognized
   read-only test, lint, type-check, status/diff, and inert probe commands are
-  accepted; a mutating or unknown command cannot hide behind `verify`.
+  accepted; shell substitution, a mutating command, or an unknown command cannot
+  hide behind `verify`. A verifier that changes the workspace fails and advances
+  the mutation generation.
 - `file`: read `path` and require every string in `contains`.
 
 The declared verifier level must meet the goal's importance floor:
@@ -100,6 +104,9 @@ receipt only counts when its generation equals the current generation, its
 verifier identity still matches the frozen verifier, it passed, and its level
 meets `imp`. This deliberately means work on a later requirement can stale an
 earlier receipt; final evaluation requires re-running the affected checks.
+Finalization also re-runs every recorded verifier so editing a receipt cannot
+manufacture completion. Tool hooks reject direct access to `.dopa`; controller
+state transitions must go through exact `decide.py` commands.
 
 ## Outcome and terminal-blocker inputs
 
@@ -127,13 +134,31 @@ evidence establishing it:
 ```json
 {
   "reason": "The required upstream API was permanently retired",
-  "evidence": "Provider deprecation notice dated 2026-08-31"
+  "evidence": {
+    "kind": "file",
+    "path": "evidence/provider-deprecation.txt",
+    "contains": ["permanently retired"]
+  }
 }
 ```
 
 Run `decide.py block /tmp/dopa-blocker.json`, then `decide.py evaluate`.
-Inconvenience, repeated failure, or low remaining context is not a terminal
-blocker.
+The evidence file is verified when recorded and again when finalizing. A known
+regression or unobserved mutation must be resolved first. Inconvenience,
+repeated failure, controller state under `.dopa`, or low remaining context is
+not terminal-blocker evidence.
+
+If the user changes the objective, use a distinct authorized cancellation:
+
+```json
+{
+  "reason": "The user replaced the requested objective",
+  "user_authorized": true
+}
+```
+
+Run `decide.py cancel /tmp/dopa-cancel.json`, then start the replacement goal.
+Never infer user authorization or use cancellation to escape unfinished work.
 
 ## Platform composition
 

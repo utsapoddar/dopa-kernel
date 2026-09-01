@@ -24,10 +24,11 @@ The current controller connects those ideas end to end:
 - `kernel/policy.py` — deterministic action selection with hard envelope and
   regression constraints, requirement priority, progress-first behavior, and
   decision-critical `reduce-first` research.
-- `kernel/evaluator.py` — exact command/file verifiers, evidence receipts, and
-  independent `met / not_met / impossible` completion decisions.
-- `kernel/decide.py` — `start`, `select`, `outcome`, `verify`, `evaluate`, and
-  `status` CLI.
+- `kernel/evaluator.py` — shell-free command/file verifiers, mutation detection,
+  live final re-verification, evidence receipts, and independent
+  `met / not_met / impossible` completion decisions.
+- `kernel/decide.py` — `start`, `select`, `outcome`, `verify`, `block`, `cancel`,
+  `evaluate`, and `status` CLI.
 - `kernel/gate_decide.py` — Claude PreToolUse gate. Exact control commands are
   exempt; unknown shell commands are mutations; authorization is locked and
   later mutations stale earlier evidence.
@@ -50,6 +51,11 @@ python3 /path/to/dopa-kernel/kernel/decide.py outcome /tmp/dopa-outcome.json
 python3 /path/to/dopa-kernel/kernel/decide.py verify requirement-id
 python3 /path/to/dopa-kernel/kernel/decide.py evaluate
 ```
+
+If the user explicitly changes the objective, run
+`decide.py cancel /tmp/dopa-cancel.json` before starting its replacement. See
+the contract guide for the authorized cancellation and evidence-backed blocker
+schemas.
 
 See [`reference/goal-contract.md`](reference/goal-contract.md) for both schemas
 and the exact evidence semantics.
@@ -103,7 +109,7 @@ Register the stable absolute hook paths in `~/.claude/settings.json`:
 {
   "hooks": {
     "PreToolUse": [{
-      "matcher": "Write|Edit|NotebookEdit|Bash",
+      "matcher": "*",
       "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_decide.py"}]
     }],
     "Stop": [{
@@ -135,8 +141,14 @@ real-world agent success rates.
   deterministic code validates and applies them but cannot prove the judgments
   were wise. At high stakes, make independence concrete and user-visible.
 - The shell classifier is conservative, not a full shell interpreter. Unknown
-  commands are treated as mutations, verifier commands use a read-only
-  allowlist, and active controller errors fail closed.
+  commands are treated as mutations, shell substitution is never read-only,
+  verifier commands use a read-only allowlist without `shell=True`, and active
+  controller errors fail closed. Direct tool access to `.dopa` is blocked.
+- PreToolUse is registered for every tool name so MCP and future mutation tools
+  cannot bypass generation accounting. An active workspace goal also keeps the
+  gate active in delegated transcripts that lack the original skill invocation.
+  This is still an agent-control mechanism, not an operating-system security
+  sandbox: processes outside the installed hooks remain outside its authority.
 - A previous README reported `4/5` from a small replay. That was development
   evidence, not a valid effectiveness result, and is not retained as a claim.
 - The current public claim is mechanical only: the controller blocks the tested

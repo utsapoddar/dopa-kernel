@@ -18,7 +18,7 @@ STATE_DIR = ".dopa"
 STATE_FILE = "goal.json"
 SCHEMA_VERSION = 1
 EVIDENCE_LEVELS = {"observed": 1, "independent": 2, "held-out": 3}
-_SHELL_META = re.compile(r"[;&|<>\n\r]")
+_SHELL_META = re.compile(r"[;&|<>\n\r`$()]")
 
 
 def now() -> str:
@@ -54,7 +54,37 @@ def load_state(root: str | os.PathLike[str] | None = None) -> dict:
         raise ValueError(f"invalid goal state: {exc}") from exc
     if not isinstance(value, dict):
         raise ValueError("invalid goal state: root must be an object")
+    _validate_loaded_state(value)
     return value
+
+
+def _validate_loaded_state(state: dict) -> None:
+    if state.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("invalid goal state: unsupported schema version")
+    if state.get("status") not in {"active", "complete", "impossible", "cancelled"}:
+        raise ValueError("invalid goal state: invalid status")
+    generation = state.get("mutation_generation")
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation < 0:
+        raise ValueError("invalid goal state: mutation_generation must be non-negative")
+    requirements = state.get("requirements")
+    if not isinstance(requirements, list):
+        raise ValueError("invalid goal state: requirements must be a list")
+    contract = {
+        "objective": state.get("objective"),
+        "imp": state.get("imp"),
+        "constraints": state.get("constraints"),
+        "requirements": [
+            {key: requirement.get(key) for key in ("id", "text", "priority", "verify")}
+            if isinstance(requirement, dict) else requirement
+            for requirement in requirements
+        ],
+    }
+    try:
+        frozen = validate_contract(contract)
+    except ValueError as exc:
+        raise ValueError(f"invalid goal state: {exc}") from exc
+    if state.get("goal_id") != _goal_id(frozen):
+        raise ValueError("invalid goal state: goal contract integrity check failed")
 
 
 def _integer(value: object, label: str, low: int = 1, high: int = 5) -> int:
@@ -221,7 +251,7 @@ def save_state(state: dict, root: str | os.PathLike[str] | None = None) -> None:
 
 def _start_goal(raw: dict, root: str | os.PathLike[str] | None = None) -> dict:
     existing = load_state(root)
-    if existing and existing.get("status") not in ("complete", "impossible"):
+    if existing and existing.get("status") not in ("complete", "impossible", "cancelled"):
         raise ValueError(
             f"unfinished goal {existing.get('goal_id', '?')} cannot be replaced; "
             "complete it before starting another"
@@ -280,14 +310,38 @@ def _record_terminal_blocker(raw: dict, root: str | os.PathLike[str] | None = No
     evidence = raw.get("evidence")
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError("blocker.reason must be a non-empty string")
-    if not isinstance(evidence, str) or not evidence.strip():
-        raise ValueError("blocker.evidence must identify external evidence")
+    if not isinstance(evidence, dict) or evidence.get("kind") != "file":
+        raise ValueError("blocker.evidence must be a verifier with kind=file")
+    path = evidence.get("path")
+    contains = evidence.get("contains")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("blocker.evidence.path must be a non-empty string")
+    if not isinstance(contains, list) or not contains or not all(
+        isinstance(marker, str) and marker for marker in contains
+    ):
+        raise ValueError("blocker.evidence.contains must be a non-empty string list")
+    evidence_path = Path(path)
+    if not evidence_path.is_absolute():
+        evidence_path = Path(root or os.getcwd()) / evidence_path
+    protected = (Path(root or os.getcwd()) / STATE_DIR).resolve()
+    resolved_evidence = evidence_path.resolve()
+    if resolved_evidence == protected or protected in resolved_evidence.parents:
+        raise ValueError("blocker evidence cannot use controller state")
     state = load_state(root)
     if not state or state.get("status") != "active":
         raise ValueError("no active goal")
+    if state.get("known_regression"):
+        raise ValueError("resolve the known regression before recording impossible")
+    if (state.get("selected_action") or {}).get("awaiting_outcome"):
+        raise ValueError("record the pending mutation outcome before recording impossible")
+    frozen = {"kind": "file", "path": path.strip(), "contains": list(contains)}
+    passed, digest, summary = verify_blocker_evidence(frozen, root)
+    if not passed:
+        raise ValueError(f"blocker evidence did not verify: {summary}")
     state["terminal_blocker"] = {
         "reason": reason.strip(),
-        "evidence": evidence.strip(),
+        "evidence": frozen,
+        "receipt": {"passed": True, "digest": digest, "summary": summary},
         "recorded_at": now(),
     }
     save_state(state, root)
@@ -297,3 +351,44 @@ def _record_terminal_blocker(raw: dict, root: str | os.PathLike[str] | None = No
 def record_terminal_blocker(raw: dict, root: str | os.PathLike[str] | None = None) -> dict:
     with state_lock(root):
         return _record_terminal_blocker(raw, root)
+
+
+def verify_blocker_evidence(evidence: dict, root: str | os.PathLike[str] | None = None):
+    path = Path(evidence["path"])
+    if not path.is_absolute():
+        path = Path(root or os.getcwd()) / path
+    try:
+        content = path.read_bytes()
+    except OSError as exc:
+        return False, hashlib.sha256(b"").hexdigest(), f"cannot read {evidence['path']}: {exc}"
+    text = content.decode(errors="replace")
+    missing = [marker for marker in evidence["contains"] if marker not in text]
+    digest = hashlib.sha256(content).hexdigest()
+    if missing:
+        return False, digest, f"missing required blocker evidence: {missing}"
+    return True, digest, f"verified blocker evidence {evidence['path']}"
+
+
+def _cancel_goal(raw: dict, root: str | os.PathLike[str] | None = None) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError("cancel request must be a JSON object")
+    reason = raw.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("cancel.reason must be a non-empty string")
+    if raw.get("user_authorized") is not True:
+        raise ValueError("cancel requires explicit user authorization")
+    state = load_state(root)
+    if not state or state.get("status") != "active":
+        raise ValueError("no active goal")
+    state["status"] = "cancelled"
+    state["cancelled_goal_id"] = state.get("goal_id")
+    state["cancel_reason"] = reason.strip()
+    state["cancelled_at"] = now()
+    state["selected_action"] = None
+    save_state(state, root)
+    return state
+
+
+def cancel_goal(raw: dict, root: str | os.PathLike[str] | None = None) -> dict:
+    with state_lock(root):
+        return _cancel_goal(raw, root)

@@ -70,6 +70,14 @@ class PolicyTest(unittest.TestCase):
         ], self.state)
         self.assertEqual(result["path"], "critical")
 
+    def test_lower_priority_candidate_is_not_selected_when_highest_has_none(self):
+        result = policy.choose([
+            candidate("polish", requirement="polish", confidence=5, cost=1),
+        ], self.state)
+        self.assertEqual(result["verdict"], "exhausted")
+        self.assertIsNone(result["path"])
+        self.assertIn("critical", result["why"])
+
     def test_clear_progress_dominates_irrelevant_research(self):
         result = policy.choose([
             candidate("build", confidence=4, cost=3),

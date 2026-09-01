@@ -129,16 +129,15 @@ def choose(raw_candidates: Iterable[dict], state: dict) -> dict:
         return {"verdict": "exhausted", "path": None,
                 "why": "no live in-frame, non-regressing candidate remains"}
 
-    priorities = {requirement["id"]: requirement["priority"] for requirement in unmet}
-    serving_unmet = [candidate for candidate in eligible if candidate["requirement_id"] in priorities]
-    if not serving_unmet:
+    highest = max(requirement["priority"] for requirement in unmet)
+    highest_ids = {
+        requirement["id"] for requirement in unmet if requirement["priority"] == highest
+    }
+    focused = [candidate for candidate in eligible if candidate["requirement_id"] in highest_ids]
+    if not focused:
+        names = ", ".join(sorted(highest_ids))
         return {"verdict": "exhausted", "path": None,
-                "why": "no candidate serves an unmet requirement"}
-    highest = max(priorities[candidate["requirement_id"]] for candidate in serving_unmet)
-    focused = [
-        candidate for candidate in serving_unmet
-        if priorities[candidate["requirement_id"]] == highest
-    ]
+                "why": f"no candidate serves highest-priority unmet requirement: {names}"}
 
     recoverable = [candidate for candidate in focused if candidate["failure_recoverable"]]
     if recoverable:

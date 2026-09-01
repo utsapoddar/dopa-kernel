@@ -72,6 +72,10 @@ class ShellClassificationTest(unittest.TestCase):
         self.assertTrue(self.mutation("find . -name '*.tmp' -delete"))
         self.assertTrue(self.mutation("git diff --output=changes.patch"))
 
+    def test_shell_substitution_is_never_read_only(self):
+        self.assertTrue(self.mutation("ls $(touch owned)"))
+        self.assertTrue(self.mutation("cat `touch owned`"))
+
     def test_only_actual_temporary_file_targets_are_exempt(self):
         self.assertFalse(gate_decide.is_mutation("Write", {"file_path": "/tmp/dopa-input.json"}, "/x"))
         self.assertTrue(gate_decide.is_mutation(
@@ -154,11 +158,77 @@ class PreToolGateTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("does not follow", result.stderr)
 
+    def test_authoritative_state_cannot_be_written_by_tools(self):
+        self.start_and_select()
+        payload = {
+            "transcript_path": str(self.trace),
+            "cwd": str(self.root),
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(self.root / ".dopa/goal.json"), "content": "{}"},
+        }
+        result = subprocess.run(
+            [sys.executable, str(K / "gate_decide.py")],
+            input=json.dumps(payload), capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("controller state is protected", result.stderr)
+
+    def test_authoritative_state_cannot_be_read_by_tools(self):
+        self.start_and_select()
+        payload = {
+            "transcript_path": str(self.trace),
+            "cwd": str(self.root),
+            "tool_name": "Read",
+            "tool_input": {"file_path": str(self.root / ".dopa/goal.json")},
+        }
+        result = subprocess.run(
+            [sys.executable, str(K / "gate_decide.py")],
+            input=json.dumps(payload), capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("controller state is protected", result.stderr)
+
+    def test_shell_cannot_target_authoritative_state(self):
+        self.start_and_select()
+        result = self.gate("cat .dopa/goal.json")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("controller state is protected", result.stderr)
+
+    def test_documentation_may_mention_state_path(self):
+        self.start_and_select()
+        payload = {
+            "transcript_path": str(self.trace),
+            "cwd": str(self.root),
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(self.root / "README.md"),
+                "content": "Do not edit .dopa/goal.json directly.",
+            },
+        }
+        result = subprocess.run(
+            [sys.executable, str(K / "gate_decide.py")],
+            input=json.dumps(payload), capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_unknown_tool_cannot_embed_a_controller_state_write(self):
+        self.assertTrue(gate_decide.protected_state_access(
+            "mcp__patch__apply",
+            {"patch": "*** Update File: .dopa/goal.json"},
+            str(self.root),
+        ))
+
     def test_read_only_commands_do_not_need_a_goal(self):
         self.assertEqual(self.gate("git status").returncode, 0)
 
     def test_inert_when_not_activated(self):
         self.assertEqual(self.gate(active=False).returncode, 0)
+
+    def test_active_goal_is_enforced_in_a_delegated_transcript(self):
+        model.start_goal(goal(), self.root)
+        result = self.gate(active=False)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("select", result.stderr)
 
 
 if __name__ == "__main__":

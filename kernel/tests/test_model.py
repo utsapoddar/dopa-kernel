@@ -89,6 +89,41 @@ class GoalStateTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "read-only verifier"):
             model.start_goal(bad, self.root)
 
+    def test_shell_substitution_cannot_hide_inside_a_verifier(self):
+        for command in ("printf OK$(touch owned)", "printf OK`touch owned`"):
+            bad = contract()
+            bad["requirements"][0]["verify"]["command"] = command
+            with self.subTest(command=command), self.assertRaisesRegex(
+                ValueError, "read-only verifier"
+            ):
+                model.validate_contract(bad)
+
+    def test_user_authorized_cancel_allows_replacement(self):
+        first = model.start_goal(contract(), self.root)
+        cancelled = model.cancel_goal(
+            {"reason": "The user changed the objective", "user_authorized": True},
+            self.root,
+        )
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertEqual(cancelled["cancelled_goal_id"], first["goal_id"])
+
+        replacement = model.start_goal(contract("A replacement objective"), self.root)
+        self.assertEqual(replacement["status"], "active")
+
+    def test_cancel_requires_explicit_user_authorization(self):
+        model.start_goal(contract(), self.root)
+        with self.assertRaisesRegex(ValueError, "user authorization"):
+            model.cancel_goal({"reason": "Agent wants to pivot"}, self.root)
+
+    def test_load_state_rejects_a_forged_frozen_contract(self):
+        model.start_goal(contract(), self.root)
+        state = json.loads(model.state_path(self.root).read_text())
+        state["requirements"][0]["verify"]["command"] = "true"
+        model.state_path(self.root).write_text(json.dumps(state))
+
+        with self.assertRaisesRegex(ValueError, "contract integrity"):
+            model.load_state(self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

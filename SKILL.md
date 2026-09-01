@@ -28,6 +28,8 @@ python3 <dopa-kernel>/kernel/decide.py start /tmp/dopa-goal.json
 ```
 
 An unfinished goal cannot be overwritten. See `reference/goal-contract.md`.
+If the user explicitly cancels or reframes it, record that authorization with
+`decide.py cancel /tmp/dopa-cancel.json`; do not misuse `impossible` to pivot.
 
 ## 2. Select the next semantic action
 
@@ -40,6 +42,8 @@ You infer candidate fields; you do not pick the winner. The policy applies hard
 constraints and requirement priority first. Credible progress beats research.
 `reduce-first` is valid only when uncertainty could change the action choice.
 An out-of-frame idea is a proposal, never a substitution.
+If no candidate serves the globally highest-priority unmet requirement, add or
+reframe candidates instead of silently working on a lower-priority requirement.
 
 ## 3. Run one prediction-error cycle
 
@@ -65,6 +69,9 @@ goal contract and stores a receipt with verifier identity, result, digest,
 evidence level, and mutation generation. Any later production mutation makes
 older receipts stale, so re-verify them.
 
+Command verifiers run as parsed argument vectors, never through a shell. If a
+verifier changes the workspace, it fails and advances the mutation generation.
+
 Importance only raises the minimum evidence level:
 
 - `imp 1-2`: `observed`
@@ -78,18 +85,24 @@ complete a requirement.
 
 Run `decide.py evaluate`. Its terminal verdicts are `met / not_met / impossible`.
 
-- `met`: every requirement has a fresh, sufficiently strong passing receipt and
-  no known regression.
+- `met`: every requirement has a fresh, sufficiently strong passing receipt,
+  survives final live re-verification, and has no known regression.
 - `not_met`: continue with the named requirement; re-select when needed.
 - `impossible`: stop only for an externally established terminal blocker, never
   because attempts are inconvenient or the context is long. Record its reason
-  and evidence in `/tmp/dopa-blocker.json`, then run `decide.py block` on it.
+  and a file verifier in `/tmp/dopa-blocker.json`, then run `decide.py block` on
+  it. Pending outcomes and known regressions must be resolved first.
 
 Do not declare victory before `met`. Claude's Stop hook enforces this evaluator;
 Codex `/goal` can provide durable continuation while this kernel supplies
 semantic allocation and evidence policy. Platform `/goal` never overrides the
 user-visible Dopa goal contract.
 
-Keep process state in `.dopa/`, never in the deliverable. The legacy 18-cell
-matrix remains reference material; its semantic dimensions are useful, but its
-mandatory module-reading ceremony is not part of this runtime.
+Keep process state in `.dopa/`, never in the deliverable, and never read or edit
+it directly; only exact `decide.py` control commands own that state. The legacy
+18-cell matrix remains reference material; its semantic dimensions are useful,
+but its mandatory module-reading ceremony is not part of this runtime.
+
+The active goal file keeps hooks active in delegated transcripts even when they
+do not repeat the original Skill invocation. Completion, impossibility, or an
+authorized cancellation ends that durable activation.

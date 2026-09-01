@@ -20,16 +20,14 @@ import model  # noqa: E402
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-        if not gate_decide.kernel_active(payload.get("transcript_path") or ""):
-            return 0
         root = payload.get("cwd")
+        if not gate_decide.kernel_active(payload.get("transcript_path") or "", root):
+            return 0
         state = model.load_state(root)
-        result = evaluator.evaluate(state)
+        result = evaluator.evaluate_goal(root, finalize=True)
         if result["verdict"] == "met":
-            evaluator.evaluate_goal(root, finalize=True)
             return 0
         if result["verdict"] == "impossible":
-            evaluator.evaluate_goal(root, finalize=True)
             return 0
         selected = (state.get("selected_action") or {}).get("id") if state else None
         next_action = f" Next selected action: {selected}." if selected else ""
