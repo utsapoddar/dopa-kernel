@@ -98,10 +98,22 @@ class GoalStateTest(unittest.TestCase):
             ):
                 model.validate_contract(bad)
 
-    def test_user_authorized_cancel_allows_replacement(self):
+    def test_file_verifier_cannot_verify_controller_state(self):
+        bad = contract()
+        bad["requirements"][0]["verify"] = {
+            "kind": "file",
+            "path": ".dopa/goal.json",
+            "contains": ["Ship the feature"],
+            "level": "independent",
+        }
+
+        with self.assertRaisesRegex(ValueError, "controller state"):
+            model.start_goal(bad, self.root)
+
+    def test_cancel_allows_replacement_without_a_self_asserted_boolean(self):
         first = model.start_goal(contract(), self.root)
         cancelled = model.cancel_goal(
-            {"reason": "The user changed the objective", "user_authorized": True},
+            {"reason": "The user changed the objective"},
             self.root,
         )
         self.assertEqual(cancelled["status"], "cancelled")
@@ -110,10 +122,10 @@ class GoalStateTest(unittest.TestCase):
         replacement = model.start_goal(contract("A replacement objective"), self.root)
         self.assertEqual(replacement["status"], "active")
 
-    def test_cancel_requires_explicit_user_authorization(self):
+    def test_cancel_requires_a_reason(self):
         model.start_goal(contract(), self.root)
-        with self.assertRaisesRegex(ValueError, "user authorization"):
-            model.cancel_goal({"reason": "Agent wants to pivot"}, self.root)
+        with self.assertRaisesRegex(ValueError, "reason"):
+            model.cancel_goal({}, self.root)
 
     def test_load_state_rejects_a_forged_frozen_contract(self):
         model.start_goal(contract(), self.root)

@@ -55,6 +55,7 @@ Verifier kinds:
   hide behind `verify`. A verifier that changes the workspace fails and advances
   the mutation generation.
 - `file`: read `path` and require every string in `contains`.
+  A file verifier cannot target `.dopa/` controller state.
 
 The declared verifier level must meet the goal's importance floor:
 `observed` for 1-2, `independent` for 3, and `held-out` for 4-5. A label is a
@@ -152,13 +153,16 @@ If the user changes the objective, use a distinct authorized cancellation:
 
 ```json
 {
-  "reason": "The user replaced the requested objective",
-  "user_authorized": true
+  "reason": "The user replaced the requested objective"
 }
 ```
 
 Run `decide.py cancel /tmp/dopa-cancel.json`, then start the replacement goal.
-Never infer user authorization or use cancellation to escape unfinished work.
+With the Claude hooks installed, `cancel` and `block` return the platform's
+native `permissionDecision: "ask"`, which still forces a user prompt in auto
+mode. Direct CLI use is an operator action; on platforms without that hook,
+invoke either transition only after the user's explicit instruction. Never
+infer authorization or use cancellation to escape unfinished work.
 
 ## Platform composition
 

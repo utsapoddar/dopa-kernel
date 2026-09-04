@@ -230,6 +230,28 @@ class PreToolGateTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("select", result.stderr)
 
+    def test_terminal_goal_deactivates_even_if_transcript_invoked_skill(self):
+        state = model.start_goal(goal(), self.root)
+        for status in ("complete", "impossible", "cancelled"):
+            with self.subTest(status=status):
+                state["status"] = status
+                model.save_state(state, self.root)
+                self.assertFalse(gate_decide.kernel_active(str(self.trace), str(self.root)))
+
+    def test_cancel_and_block_commands_require_native_user_approval(self):
+        model.start_goal(goal(), self.root)
+        for subcommand in ("cancel", "block"):
+            with self.subTest(subcommand=subcommand):
+                command = (
+                    f"{sys.executable} {K / 'decide.py'} {subcommand} "
+                    f"/tmp/dopa-{subcommand}.json"
+                )
+                result = self.gate(command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                decision = json.loads(result.stdout)["hookSpecificOutput"]
+                self.assertEqual(decision["hookEventName"], "PreToolUse")
+                self.assertEqual(decision["permissionDecision"], "ask")
+
 
 if __name__ == "__main__":
     unittest.main()

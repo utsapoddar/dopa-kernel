@@ -34,6 +34,13 @@ TEST_COMMANDS = {"pytest", "py.test", "jest", "vitest", "rspec", "phpunit", "cte
 
 def kernel_active(path: str, cwd: str | None = None) -> bool:
     try:
+        state = model.load_state(cwd)
+    except ValueError:
+        return model.state_path(cwd).exists()
+    if state:
+        return state.get("status") == "active"
+
+    try:
         lines = Path(path).read_text(errors="replace").splitlines()
     except OSError:
         lines = []
@@ -53,11 +60,7 @@ def kernel_active(path: str, cwd: str | None = None) -> bool:
                 and (block.get("input") or {}).get("skill") == SKILL_NAME
             ):
                 return True
-    try:
-        state = model.load_state(cwd)
-    except ValueError:
-        return model.state_path(cwd).exists()
-    return state.get("status") == "active"
+    return False
 
 
 def _script_tokens(command: str) -> list[str] | None:
@@ -74,17 +77,37 @@ def _script_tokens(command: str) -> list[str] | None:
     return tokens
 
 
-def is_control_command(command: str, cwd: str | None) -> bool:
+def control_subcommand(command: str, cwd: str | None) -> str | None:
     tokens = _script_tokens(command)
     if not tokens or len(tokens) < 2:
-        return False
+        return None
     script = Path(tokens[0])
     resolved = script.resolve() if script.is_absolute() else (Path(cwd or ".") / script).resolve()
     if resolved != SELECTOR.resolve():
-        return False
+        return None
     subcommand = tokens[1]
     arity = CONTROL_ARITY.get(subcommand)
-    return arity is not None and len(tokens[2:]) == arity
+    if arity is None or len(tokens[2:]) != arity:
+        return None
+    return subcommand
+
+
+def is_control_command(command: str, cwd: str | None) -> bool:
+    return control_subcommand(command, cwd) is not None
+
+
+def request_native_approval(subcommand: str) -> None:
+    action = "cancel the active goal" if subcommand == "cancel" else "mark it impossible"
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "ask",
+            "permissionDecisionReason": (
+                f"DopaKernel is asking to {action}. Approve only if this matches "
+                "your explicit decision."
+            ),
+        }
+    }))
 
 
 def _temporary_target(path: str) -> bool:
@@ -237,6 +260,11 @@ def main() -> int:
         if protected_state_access(tool, tool_input, cwd):
             print("DopaKernel gate: controller state is protected; use decide.py commands", file=sys.stderr)
             return 2
+        if tool == "Bash":
+            subcommand = control_subcommand(str(tool_input.get("command") or ""), cwd)
+            if subcommand in {"block", "cancel"}:
+                request_native_approval(subcommand)
+                return 0
         if not is_mutation(tool, tool_input, cwd):
             return 0
         with model.state_lock(cwd):

@@ -30,6 +30,9 @@ python3 <dopa-kernel>/kernel/decide.py start /tmp/dopa-goal.json
 An unfinished goal cannot be overwritten. See `reference/goal-contract.md`.
 If the user explicitly cancels or reframes it, record that authorization with
 `decide.py cancel /tmp/dopa-cancel.json`; do not misuse `impossible` to pivot.
+With the Claude hooks installed, `cancel` and `block` force a native permission prompt.
+On other platforms, invoke either command only after the user's explicit instruction;
+never infer authorization from the agent's own reasoning.
 
 ## 2. Select the next semantic action
 
@@ -91,7 +94,8 @@ Run `decide.py evaluate`. Its terminal verdicts are `met / not_met / impossible`
 - `impossible`: stop only for an externally established terminal blocker, never
   because attempts are inconvenient or the context is long. Record its reason
   and a file verifier in `/tmp/dopa-blocker.json`, then run `decide.py block` on
-  it. Pending outcomes and known regressions must be resolved first.
+  it. The verifier cannot target controller state under `.dopa/`. Pending
+  outcomes and known regressions must be resolved first.
 
 Do not declare victory before `met`. Claude's Stop hook enforces this evaluator;
 Codex `/goal` can provide durable continuation while this kernel supplies

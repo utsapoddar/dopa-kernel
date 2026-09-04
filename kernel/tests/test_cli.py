@@ -101,10 +101,10 @@ class CLITest(unittest.TestCase):
         self.assertEqual(json.loads((self.root / ".dopa/goal.json").read_text())["status"],
                          "impossible")
 
-    def test_user_authorized_cancel_and_reframe(self):
+    def test_cancel_and_reframe(self):
         self.assertEqual(self.run_cli("start", "goal.json").returncode, 0)
         (self.root / "cancel.json").write_text(json.dumps({
-            "reason": "The user changed the objective", "user_authorized": True,
+            "reason": "The user changed the objective",
         }))
         cancelled = self.run_cli("cancel", "cancel.json")
         self.assertEqual(cancelled.returncode, 0, cancelled.stderr)

@@ -54,11 +54,14 @@ def load_state(root: str | os.PathLike[str] | None = None) -> dict:
         raise ValueError(f"invalid goal state: {exc}") from exc
     if not isinstance(value, dict):
         raise ValueError("invalid goal state: root must be an object")
-    _validate_loaded_state(value)
+    _validate_loaded_state(value, root)
     return value
 
 
-def _validate_loaded_state(state: dict) -> None:
+def _validate_loaded_state(
+    state: dict,
+    root: str | os.PathLike[str] | None = None,
+) -> None:
     if state.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("invalid goal state: unsupported schema version")
     if state.get("status") not in {"active", "complete", "impossible", "cancelled"}:
@@ -80,7 +83,7 @@ def _validate_loaded_state(state: dict) -> None:
         ],
     }
     try:
-        frozen = validate_contract(contract)
+        frozen = validate_contract(contract, root)
     except ValueError as exc:
         raise ValueError(f"invalid goal state: {exc}") from exc
     if state.get("goal_id") != _goal_id(frozen):
@@ -140,7 +143,23 @@ def is_read_only_verifier(command: str) -> bool:
     return False
 
 
-def validate_contract(raw: dict) -> dict:
+def _uses_controller_state(
+    path: str,
+    root: str | os.PathLike[str] | None = None,
+) -> bool:
+    base = Path(root or os.getcwd()).resolve()
+    protected = (base / STATE_DIR).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    resolved = candidate.resolve()
+    return resolved == protected or protected in resolved.parents
+
+
+def validate_contract(
+    raw: dict,
+    root: str | os.PathLike[str] | None = None,
+) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("goal contract must be a JSON object")
     objective = raw.get("objective")
@@ -207,6 +226,8 @@ def validate_contract(raw: dict) -> dict:
             path = verify.get("path")
             if not isinstance(path, str) or not path.strip():
                 raise ValueError(f"requirement {rid}.verify.path must be non-empty")
+            if _uses_controller_state(path, root):
+                raise ValueError(f"requirement {rid}.verify.path cannot use controller state")
             contains = verify.get("contains", [])
             if not isinstance(contains, list) or not all(
                 isinstance(marker, str) and marker for marker in contains
@@ -256,7 +277,7 @@ def _start_goal(raw: dict, root: str | os.PathLike[str] | None = None) -> dict:
             f"unfinished goal {existing.get('goal_id', '?')} cannot be replaced; "
             "complete it before starting another"
         )
-    contract = validate_contract(copy.deepcopy(raw))
+    contract = validate_contract(copy.deepcopy(raw), root)
     timestamp = now()
     state = {
         "schema_version": SCHEMA_VERSION,
@@ -375,8 +396,6 @@ def _cancel_goal(raw: dict, root: str | os.PathLike[str] | None = None) -> dict:
     reason = raw.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError("cancel.reason must be a non-empty string")
-    if raw.get("user_authorized") is not True:
-        raise ValueError("cancel requires explicit user authorization")
     state = load_state(root)
     if not state or state.get("status") != "active":
         raise ValueError("no active goal")

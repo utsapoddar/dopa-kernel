@@ -5,6 +5,10 @@ It keeps the user's objective stable, allocates the next action from explicit
 progress and information state, and refuses completion until every requirement
 has fresh structured evidence.
 
+Its threat model is a cooperative but fallible agent that may stop early,
+misread progress, or rely on stale evidence. It is not a security boundary
+against a deliberately malicious process running with the user's own access.
+
 The name comes from dopamine as prediction error: behavior should change from
 the gap between `expect` and `got`, not from the model's confidence that it is
 probably finished.
@@ -55,7 +59,8 @@ python3 /path/to/dopa-kernel/kernel/decide.py evaluate
 If the user explicitly changes the objective, run
 `decide.py cancel /tmp/dopa-cancel.json` before starting its replacement. See
 the contract guide for the authorized cancellation and evidence-backed blocker
-schemas.
+schemas. With the Claude hooks installed, both `cancel` and `block` force a
+native permission prompt, including in auto mode.
 
 See [`reference/goal-contract.md`](reference/goal-contract.md) for both schemas
 and the exact evidence semantics.
@@ -137,6 +142,10 @@ real-world agent success rates.
 
 ## Evidence boundary and limits
 
+- Host sandbox and permissions own execution authority; DopaKernel owns
+  semantic requirements, action selection, evidence freshness, and the
+  completion decision. Auto mode changes approval friction, not whether those
+  semantic requirements have been met.
 - Candidate semantics and evidence-level labels originate in the goal contract;
   deterministic code validates and applies them but cannot prove the judgments
   were wise. At high stakes, make independence concrete and user-visible.
@@ -148,9 +157,15 @@ real-world agent success rates.
   cannot bypass generation accounting. An active workspace goal also keeps the
   gate active in delegated transcripts that lack the original skill invocation.
   This is still an agent-control mechanism, not an operating-system security
-  sandbox: processes outside the installed hooks remain outside its authority.
+  sandbox. Deliberate same-user modification of controller state, hooks, or
+  settings, and processes outside the installed hooks, remain outside its
+  authority.
+- The Claude PreToolUse hook uses the platform's `permissionDecision: "ask"`
+  for cancellation and impossibility. Direct CLI invocation is an operator
+  interface and therefore assumes the caller already has user authorization.
 - A previous README reported `4/5` from a small replay. That was development
   evidence, not a valid effectiveness result, and is not retained as a claim.
 - The current public claim is mechanical only: the controller blocks the tested
-  premature-completion and authorization bypasses. Behavioral effectiveness
-  still requires a fresh, preregistered evaluation on unburned tasks.
+  semantic premature-completion cases under this threat model. Behavioral
+  effectiveness still requires a fresh, preregistered evaluation on unburned
+  tasks.

@@ -93,6 +93,12 @@ class CompletionGateTest(unittest.TestCase):
         self.assertEqual(self.gate().returncode, 0)
         self.assertEqual(model.load_state(self.root)["status"], "impossible")
 
+    def test_cancelled_goal_allows_stop_even_when_transcript_invoked_skill(self):
+        self.start()
+        model.cancel_goal({"reason": "The user changed the objective"}, self.root)
+
+        self.assertEqual(self.gate().returncode, 0)
+
     def test_inert_when_kernel_is_not_active(self):
         self.assertEqual(self.gate(active=False).returncode, 0)
 
