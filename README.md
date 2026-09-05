@@ -5,10 +5,6 @@ It keeps the user's objective stable, allocates the next action from explicit
 progress and information state, and refuses completion until every requirement
 has fresh structured evidence.
 
-Its threat model is a cooperative but fallible agent that may stop early,
-misread progress, or rely on stale evidence. It is not a security boundary
-against a deliberately malicious process running with the user's own access.
-
 The name comes from dopamine as prediction error: behavior should change from
 the gap between `expect` and `got`, not from the model's confidence that it is
 probably finished.
