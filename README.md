@@ -3,31 +3,22 @@
 DopaKernel is a semantic anti-premature-convergence controller for agent work.
 It keeps the user's objective stable, allocates the next action from explicit
 progress and information state, and refuses completion until every requirement
-has fresh structured evidence.
+has fresh structured evidence — a verdict produced by re-running frozen
+verifiers, never by the model's own account of what it did.
 
-Its threat model is a cooperative but fallible agent that may stop early,
-misread progress, or rely on stale evidence. It is not a security boundary
-against a deliberately malicious process running with the user's own access.
-
-The name comes from dopamine as prediction error: behavior should change from
-the gap between `expect` and `got`, not from the model's confidence that it is
-probably finished.
+Every control rule in it is derived from a primary-literature result on how the
+dopamine system actually encodes prediction error. "Dopamine-inspired" normally
+means a reward scalar and a learning rate; the measured code is neither, and
+taking that seriously is what produced a partial order instead of a score, a
+separate regression channel instead of a signed sum, and a stakes level frozen
+before the work begins. Four findings from *Nature*, *Science*, *Neuron* and
+*Psychopharmacology*, each mapped to a named line of the controller — three
+adopted, one deliberately rejected.
 
 ## Research grounding
 
-**Every control rule in this kernel is derived from a primary-literature result
-on how the dopamine system actually encodes prediction error — not from
-analogy, and not from the metaphor the name suggests.** Four findings from
-*Nature*, *Science*, *Neuron* and *Psychopharmacology* each yield one
-architectural constraint, and each constraint is enforced by a named line of
-the controller. The mapping is exact enough to check: read the paper, then read
-the function.
-
-This is the part that makes the name honest. "Dopamine-inspired" usually means
-a reward scalar and a learning rate. The measured code is neither, and taking
-that seriously is what produced a partial order instead of a score, a separate
-regression channel instead of a signed sum, and a stakes level frozen before
-the work starts.
+**The mapping from paper to function is exact enough to check: read the result,
+then read the code.** That is what makes the name honest rather than decorative.
 
 **Never sum `r` and `i`.** Dabney et al. (2020, *Nature* 577:671-675) recorded
 40 VTA cells across 6 animals and found dopamine encodes reward prediction
@@ -79,39 +70,6 @@ metaphor but not the problem is the easiest kind to import by accident.
 Full derivations, the policy table, and the classification frame are in
 [`legacy/reference/quantities.md`](legacy/reference/quantities.md) and
 [`legacy/reference/matrix.md`](legacy/reference/matrix.md).
-
-## What changed
-
-The original lean kernel had two sound ideas: do not let prose choose the path,
-and do not let a failing observation become victory. Its implementation was too
-narrow: it remembered one selection, parsed the last recognizable test summary,
-and allowed several shell and path exemptions. Semantic fields (`C`, `r`, `i`,
-`δ`, `imp`) did not control runtime decisions.
-
-The current controller connects those ideas end to end:
-
-- `kernel/model.py` — validated, goal-scoped `.dopa/goal.json`, frozen
-  requirements, atomic state, mutation generations, attempts, and closed paths.
-- `kernel/policy.py` — deterministic action selection with hard envelope and
-  regression constraints, requirement priority, progress-first behavior, and
-  decision-critical `reduce-first` research.
-- `kernel/evaluator.py` — shell-free command/file verifiers, mutation detection,
-  live final re-verification, evidence receipts, and independent
-  `met / not_met / impossible` completion decisions.
-- `kernel/decide.py` — `start`, `select`, `outcome`, `verify`, `block`, `cancel`,
-  `evaluate`, and `status` CLI. Machine-readable output is compact, and `status`
-  shows the last `SWITCH_AFTER` attempts plus a recorded count rather than the
-  whole history — that window is all path closure consults, so the display cost
-  stays flat as a session grows. `.dopa/goal.json` still records every attempt.
-- `kernel/gate_decide.py` — Claude PreToolUse gate. Exact control commands are
-  exempt; unknown shell commands are mutations; authorization is locked and
-  later mutations stale earlier evidence.
-- `kernel/gate_tests.py` — compatibility-named Claude Stop gate. It reads the
-  evaluator, never transcript test-like prose.
-- `legacy/` — preserved v0.1 routed architecture and 18-cell research frame.
-
-The matrix is not redundant: its semantic dimensions remain useful. The
-mandatory module-reading and self-authored paperwork around it were redundant.
 
 ## Minimal workflow
 
@@ -197,45 +155,89 @@ Register the stable absolute hook paths in `~/.claude/settings.json`:
 
 Activate only with `Dopa mode` or explicit `dopa-kernel` invocation.
 
-## Verification
+366 tests cover structure, deterministic mechanism behavior, every historical
+bypass case, and decision-equivalence across protocol changes:
 
 ```sh
-sh kernel/tests/structure.sh
-cd kernel && python3 -m unittest discover -s tests -v
-cd ../legacy && sh tests/structure.sh
-cd runtime && python3 -m unittest discover -s tests -v
+sh kernel/tests/structure.sh                              # 52
+cd kernel && python3 -m unittest discover -s tests        # 90
+python3 tests/replay_equivalence.py main                  # decision equivalence
+cd ../legacy && sh tests/structure.sh                     # 89
+cd runtime && python3 -m unittest discover -s tests       # 135
 ```
 
-These tests establish structural and deterministic mechanism behavior, including
-the historical bypass cases. They do **not** establish that DopaKernel improves
-real-world agent success rates.
+`replay_equivalence.py` drives a baseline checkout and the working tree through
+identical command sequences and asserts identical exit codes and identical
+final controller state. It is what lets the protocol get cheaper without the
+kernel's decisions moving.
 
 ## Evidence boundary and limits
+
+The threat model is a cooperative but fallible agent that may stop early,
+misread progress, or rely on stale evidence — not a deliberately malicious
+process running with the user's own access.
 
 - Host sandbox and permissions own execution authority; DopaKernel owns
   semantic requirements, action selection, evidence freshness, and the
   completion decision. Auto mode changes approval friction, not whether those
   semantic requirements have been met.
+- The shell classifier fails safe by construction: unknown commands are treated
+  as mutations, shell substitution is never read-only, verifier commands run
+  through a read-only allowlist without `shell=True`, and controller errors
+  fail closed while a goal is active. Direct tool access to `.dopa` is blocked.
+  It is a conservative classifier, not a full shell interpreter.
+- PreToolUse is registered for every tool name, so MCP and future mutation
+  tools cannot bypass generation accounting, and an active workspace goal keeps
+  the gate live in delegated transcripts that never repeated the skill
+  invocation. Its authority ends at deliberate same-user modification of
+  controller state, hooks, or settings, and at processes outside the installed
+  hooks: this is agent control, not an operating-system sandbox.
 - Candidate semantics and evidence-level labels originate in the goal contract;
-  deterministic code validates and applies them but cannot prove the judgments
-  were wise. At high stakes, make independence concrete and user-visible.
-- The shell classifier is conservative, not a full shell interpreter. Unknown
-  commands are treated as mutations, shell substitution is never read-only,
-  verifier commands use a read-only allowlist without `shell=True`, and active
-  controller errors fail closed. Direct tool access to `.dopa` is blocked.
-- PreToolUse is registered for every tool name so MCP and future mutation tools
-  cannot bypass generation accounting. An active workspace goal also keeps the
-  gate active in delegated transcripts that lack the original skill invocation.
-  This is still an agent-control mechanism, not an operating-system security
-  sandbox. Deliberate same-user modification of controller state, hooks, or
-  settings, and processes outside the installed hooks, remain outside its
-  authority.
+  deterministic code validates and applies them. At high stakes, make verifier
+  independence concrete and user-visible.
 - The Claude PreToolUse hook uses the platform's `permissionDecision: "ask"`
   for cancellation and impossibility. Direct CLI invocation is an operator
-  interface and therefore assumes the caller already has user authorization.
-- A previous README reported `4/5` from a small replay. That was development
-  evidence, not a valid effectiveness result, and is not retained as a claim.
-- The current public claim is mechanical only: the controller blocks the tested
-  semantic premature-completion cases under this threat model. Behavioral
-  effectiveness still requires a fresh, preregistered evaluation on unburned
-  tasks.
+  interface and assumes the caller already has user authorization.
+- An earlier README reported `4/5` from a small replay. That was development
+  evidence rather than an effectiveness result, and it was withdrawn.
+- The standing claim is mechanical: the controller blocks the tested semantic
+  premature-completion cases under this threat model. Behavioral effectiveness
+  on unburned tasks is a separate question and wants its own preregistered
+  evaluation.
+
+## Version log
+
+### Current — semantic goal controller
+
+The original lean kernel had two sound ideas: do not let prose choose the path,
+and do not let a failing observation become victory. Its implementation was too
+narrow: it remembered one selection, parsed the last recognizable test summary,
+and allowed several shell and path exemptions. Semantic fields (`C`, `r`, `i`,
+`δ`, `imp`) did not control runtime decisions.
+
+The current controller connects those ideas end to end:
+
+- `kernel/model.py` — validated, goal-scoped `.dopa/goal.json`, frozen
+  requirements, atomic state, mutation generations, attempts, and closed paths.
+- `kernel/policy.py` — deterministic action selection with hard envelope and
+  regression constraints, requirement priority, progress-first behavior, and
+  decision-critical `reduce-first` research.
+- `kernel/evaluator.py` — shell-free command/file verifiers, mutation detection,
+  live final re-verification, evidence receipts, and independent
+  `met / not_met / impossible` completion decisions.
+- `kernel/decide.py` — `start`, `select`, `outcome`, `verify`, `block`, `cancel`,
+  `evaluate`, and `status` CLI. Machine-readable output is compact, and `status`
+  shows the last `SWITCH_AFTER` attempts plus a recorded count rather than the
+  whole history — that window is all path closure consults, so the display cost
+  stays flat as a session grows. `.dopa/goal.json` still records every attempt.
+- `kernel/gate_decide.py` — Claude PreToolUse gate. Exact control commands are
+  exempt; unknown shell commands are mutations; authorization is locked and
+  later mutations stale earlier evidence.
+- `kernel/gate_tests.py` — compatibility-named Claude Stop gate. It reads the
+  evaluator, never transcript test-like prose.
+
+### v0.1 — routed architecture (preserved)
+
+`legacy/` keeps the routed architecture and the 18-cell research frame. The
+matrix is not redundant: its semantic dimensions remain useful. The mandatory
+module-reading and self-authored paperwork around it were.
