@@ -20,8 +20,7 @@ adopted, one deliberately rejected.
 
 ## Research grounding
 
-**The mapping from paper to function is exact enough to check: read the result,
-then read the code.** That is what makes the name honest rather than decorative.
+**The mapping from paper to function is verifiable:** That is what makes the name honest rather than decorative.
 
 **Never sum `r` and `i`.** Dabney et al. (2020, *Nature* 577:671-675) recorded
 40 VTA cells across 6 animals and found dopamine encodes reward prediction
