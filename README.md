@@ -1,6 +1,6 @@
 # DopaKernel
 
-DopaKernel is a semantic anti-premature-convergence controller for agent work.
+DopaKernel is a semantic completion controller for agent work.
 It keeps the user's objective stable, allocates the next action from explicit
 progress and information state, and refuses completion until every requirement
 has fresh structured evidence — a verdict produced by re-running frozen
@@ -9,7 +9,7 @@ verifiers, never by the model's own account of what it did.
 Behavior changes from the gap between `expect` and `got`, never from the
 model's confidence that it is probably finished.
 
-Every control rule in it is derived from a primary-literature result on how the
+Its core allocation rules are derived from primary-literature results on how the
 dopamine system actually encodes prediction error. "Dopamine-inspired" normally
 means a reward scalar and a learning rate; the measured code is neither, and
 taking that seriously is what produced a partial order instead of a score, a
@@ -210,7 +210,7 @@ process running with the user's own access.
 
 ## Version log
 
-### Current — semantic goal controller
+### Current — semantic completion controller
 
 The original lean kernel had two sound ideas: do not let prose choose the path,
 and do not let a failing observation become victory. Its implementation was too
