@@ -6,6 +6,9 @@ progress and information state, and refuses completion until every requirement
 has fresh structured evidence — a verdict produced by re-running frozen
 verifiers, never by the model's own account of what it did.
 
+Behavior changes from the gap between `expect` and `got`, never from the
+model's confidence that it is probably finished.
+
 Every control rule in it is derived from a primary-literature result on how the
 dopamine system actually encodes prediction error. "Dopamine-inspired" normally
 means a reward scalar and a learning rate; the measured code is neither, and
