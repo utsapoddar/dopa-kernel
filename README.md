@@ -15,10 +15,19 @@ probably finished.
 
 ## Research grounding
 
-The controller's odder-looking commitments — no single score, regressions in
-their own channel, importance fixed before the work starts — are not style
-preferences. Each was adopted from a specific finding about how the dopamine
-system actually encodes prediction error.
+**Every control rule in this kernel is derived from a primary-literature result
+on how the dopamine system actually encodes prediction error — not from
+analogy, and not from the metaphor the name suggests.** Four findings from
+*Nature*, *Science*, *Neuron* and *Psychopharmacology* each yield one
+architectural constraint, and each constraint is enforced by a named line of
+the controller. The mapping is exact enough to check: read the paper, then read
+the function.
+
+This is the part that makes the name honest. "Dopamine-inspired" usually means
+a reward scalar and a learning rate. The measured code is neither, and taking
+that seriously is what produced a partial order instead of a score, a separate
+regression channel instead of a signed sum, and a stakes level frozen before
+the work starts.
 
 **Never sum `r` and `i`.** Dabney et al. (2020, *Nature* 577:671-675) recorded
 40 VTA cells across 6 animals and found dopamine encodes reward prediction
@@ -49,28 +58,27 @@ arrives. That is why `imp` is declared with the goal contract, frozen into the
 goal identity at `start`, and floors the evidence bar afterwards; it is never
 inferred once results are in.
 
-**Pacing has a closed form — and it was cut.** Niv, Daw, Joel & Dayan (2007,
-*Psychopharmacology* 191:507-520) model an agent choosing both an action and a
-latency `tau`, paying a vigor cost `C_v / tau` against the opportunity cost of
-time `Rbar * tau`. Their Eq. 4 gives `tau* = sqrt(C_v / Rbar)`: optimal latency
-depends only on the vigor constant and the average reward rate, identically for
-every action, which is why one tonic level retunes the pace of everything at
-once. This is **not** part of the current kernel. It governed pace and never
-quality, no gate ever read it, and its derivation assumes a free-operant
-setting whose scarce resource is seconds rather than context and turns. It
-survives as `legacy/runtime/pacing.py` and is documented for the record, not
-for use.
+**Pacing has a closed form, and adopting it would have been wrong.** Niv, Daw,
+Joel & Dayan (2007, *Psychopharmacology* 191:507-520) model an agent choosing
+both an action and a latency `tau`, paying a vigor cost `C_v / tau` against the
+opportunity cost of time `Rbar * tau`. Their Eq. 4 gives
+`tau* = sqrt(C_v / Rbar)` — optimal latency depends only on the vigor constant
+and the average reward rate, identically for every action, which is why one
+tonic level retunes the pace of everything at once. It is a genuinely elegant
+result and it does not transfer. The derivation assumes a free-operant setting
+whose scarce resource is seconds forgone from an exogenous reward stream; a
+session's scarce resource is context and turns, and the task waits while the
+agent thinks. So it was built, instrumented as a passive diagnostic that no
+gate was allowed to read, and left in `legacy/runtime/pacing.py` rather than
+promoted into the kernel.
+
+**Three of four results survived that filter.** The fourth is documented here
+precisely because rejecting it was the design decision — a result that fits the
+metaphor but not the problem is the easiest kind to import by accident.
 
 Full derivations, the policy table, and the classification frame are in
 [`legacy/reference/quantities.md`](legacy/reference/quantities.md) and
-[`legacy/reference/matrix.md`](legacy/reference/matrix.md). They sit under
-`legacy/` because the routed architecture around them was retired, not because
-the findings were — three of the four commitments above are load-bearing in
-`kernel/` today.
-
-These results justify the controller's design commitments. They say nothing
-about whether DopaKernel improves agent success rates; see the evidence
-boundary below.
+[`legacy/reference/matrix.md`](legacy/reference/matrix.md).
 
 ## What changed
 
