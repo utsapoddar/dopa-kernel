@@ -167,5 +167,60 @@ class PolicyTest(unittest.TestCase):
         self.assertIsNone(state["known_regression"])
 
 
+class OmittedFalseBooleansTest(unittest.TestCase):
+    """A boolean the author would write as false may be omitted instead.
+
+    normalise_candidate resolves every BOOL_FIELDS entry through
+    raw.get(field, False), so omission and an explicit false produce the same
+    normalised candidate. Writing them out costs context on every selection
+    and tells the policy nothing it does not already assume.
+    """
+
+    def setUp(self):
+        self.ids = {"critical", "polish"}
+
+    def test_omitting_false_booleans_normalises_identically(self):
+        explicit = {
+            "id": "fix", "requirement_id": "critical", "what": "make the change",
+            "expected_r": "advanced", "expected_i": "none", "cost": 2, "confidence": 4,
+            "in_frame": True, "failure_recoverable": True,
+            "uncertainty_reducible": False, "decision_critical_uncertainty": False,
+            "restores_regression": False,
+        }
+        terse = {
+            "id": "fix", "requirement_id": "critical", "what": "make the change",
+            "expected_r": "advanced", "expected_i": "none", "cost": 2, "confidence": 4,
+            "in_frame": True, "failure_recoverable": True,
+        }
+        self.assertEqual(policy.normalise_candidate(explicit, self.ids),
+                         policy.normalise_candidate(terse, self.ids))
+
+    def test_every_boolean_field_defaults_to_false(self):
+        minimal = {"id": "bare", "requirement_id": "critical", "what": "",
+                   "expected_r": "advanced", "expected_i": "none",
+                   "cost": 1, "confidence": 1}
+        out = policy.normalise_candidate(minimal, self.ids)
+        for field in policy.BOOL_FIELDS:
+            self.assertIs(out[field], False, field)
+
+    def test_a_true_boolean_still_has_to_be_written(self):
+        # in_frame defaults false and choose() excludes out-of-frame candidates,
+        # so omitting it is not a shorthand for declaring it.
+        omitted = policy.normalise_candidate(
+            {"id": "x", "requirement_id": "critical", "what": "",
+             "expected_r": "advanced", "expected_i": "none",
+             "cost": 1, "confidence": 1}, self.ids)
+        self.assertIs(omitted["in_frame"], False)
+
+    def test_required_scores_are_not_optional(self):
+        for missing in ("cost", "confidence"):
+            raw = {"id": "x", "requirement_id": "critical", "what": "",
+                   "expected_r": "advanced", "expected_i": "none",
+                   "cost": 1, "confidence": 1}
+            del raw[missing]
+            with self.assertRaises(ValueError):
+                policy.normalise_candidate(raw, self.ids)
+
+
 if __name__ == "__main__":
     unittest.main()

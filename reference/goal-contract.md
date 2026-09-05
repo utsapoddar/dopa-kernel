@@ -76,18 +76,27 @@ make the verifier's independence concrete and user-visible.
       "expected_i": "decision-constraining",
       "cost": 2,
       "confidence": 4,
-      "failure_recoverable": true,
-      "uncertainty_reducible": false,
-      "decision_critical_uncertainty": false,
-      "restores_regression": false
+      "failure_recoverable": true
     }
   ]
 }
 ```
 
-All booleans must be real JSON booleans. `cost` and `confidence` are integers
-from 1 to 5. `expected_r` is `advanced`, `neutral`, or `regressed`;
-`expected_i` is `decision-changing`, `decision-constraining`, or `none`.
+`id`, `requirement_id`, `expected_r`, `expected_i`, `cost` and `confidence` are
+required. `cost` and `confidence` are integers from 1 to 5. `expected_r` is
+`advanced`, `neutral`, or `regressed`; `expected_i` is `decision-changing`,
+`decision-constraining`, or `none`.
+
+**Write only the booleans that are true.** The five boolean fields —
+`in_frame`, `failure_recoverable`, `uncertainty_reducible`,
+`decision_critical_uncertainty`, `restores_regression` — each default to
+`false`, so omitting one is identical to writing it as `false`. The example
+above omits the three that do not apply. When present, a boolean must be a real
+JSON boolean, not a string or number.
+
+Omission is never a way to *assert* something. `in_frame` defaults to `false`
+and out-of-frame candidates are excluded from selection, so an in-frame
+candidate still has to say so.
 
 Selection is a partial order, not one dopamine score:
 
@@ -163,19 +172,3 @@ native `permissionDecision: "ask"`, which still forces a user prompt in auto
 mode. Direct CLI use is an operator action; on platforms without that hook,
 invoke either transition only after the user's explicit instruction. Never
 infer authorization or use cancellation to escape unfinished work.
-
-## Platform composition
-
-DopaKernel is not a replacement for platform continuation:
-
-- Codex `/goal` persists the objective by thread, injects a strong completion
-  audit into continuation turns, accounts usage, and exposes user lifecycle
-  controls. DopaKernel adds deterministic semantic next-action and receipt rules
-  rather than copying that loop.
-- Claude `/goal` uses a prompt-based Stop-hook loop and a separate small model,
-  but its evaluator cannot call tools and judges only the conversation.
-  DopaKernel's Stop hook reads frozen-verifier receipts instead of transcript
-  summaries.
-
-Keep both layers on the same user objective. Editing, pausing, clearing, or
-replacing a platform goal must not silently rewrite an unfinished Dopa contract.

@@ -41,6 +41,10 @@ envelope membership, expected `r` and `i`, confidence, bounded cost,
 recoverability, and whether reducible uncertainty is decision-critical. Write
 them to `/tmp/dopa-candidates.json`, then run `decide.py select` on that file.
 
+Write only the booleans that are true; each defaults to `false`, so an omitted
+flag and an explicit `false` are the same candidate. `in_frame` is one of them,
+so an in-frame candidate must still declare it.
+
 You infer candidate fields; you do not pick the winner. The policy applies hard
 constraints and requirement priority first. Credible progress beats research.
 `reduce-first` is valid only when uncertainty could change the action choice.
@@ -50,6 +54,19 @@ reframe candidates instead of silently working on a lower-priority requirement.
 
 ## 3. Run one prediction-error cycle
 
+**One mutation per selection, and every mutation is closed by an outcome.**
+The cycle never varies:
+
+```text
+select -> predict -> ONE mutation -> outcome -> select ...
+```
+
+There is no path from one mutation to the next that skips `outcome`. The gate
+enforces this, so a second mutation before recording the first is refused with
+`the last mutation has no observation/outcome` and the work is lost. If you are
+about to edit, write, or run a shell command and the previous mutation has not
+been recorded, record it first.
+
 1. **Predict.** State `expect:` for the selected action.
 2. **Act.** Make one bounded production mutation.
 3. **Observe.** Inspect environment output; prose and remembered counts are not evidence.
@@ -58,8 +75,8 @@ reframe candidates instead of silently working on a lower-priority requirement.
    - `i` information: `decision-changing / decision-constraining / none`
    - `δ` surprise: `better / as / worse`
 5. Write `/tmp/dopa-outcome.json` with the observed `r`, `i`, `delta`, and an
-   optional `note`; run `decide.py outcome /tmp/dopa-outcome.json` before
-   another mutation. The action is consumed, so re-select next.
+   optional `note`; run `decide.py outcome /tmp/dopa-outcome.json`. The action
+   is consumed, so re-select before acting again.
 
 Never sum them or trade progress for information. No prior `expect` makes `δ`
 unscorable. Two genuinely consecutive `worse` outcomes close the path;
@@ -97,15 +114,15 @@ Run `decide.py evaluate`. Its terminal verdicts are `met / not_met / impossible`
   it. The verifier cannot target controller state under `.dopa/`. Pending
   outcomes and known regressions must be resolved first.
 
-Do not declare victory before `met`. Claude's Stop hook enforces this evaluator;
-Codex `/goal` can provide durable continuation while this kernel supplies
-semantic allocation and evidence policy. Platform `/goal` never overrides the
-user-visible Dopa goal contract.
+Do not declare victory before `met`. Claude's Stop hook enforces this evaluator.
+A platform `/goal` never overrides the user-visible Dopa goal contract.
+
+`decide.py status` reports the current objective, requirements, open selection,
+closed paths, and the last two attempts. Use it to re-orient after a compaction
+or a handoff, not as a routine step in the cycle.
 
 Keep process state in `.dopa/`, never in the deliverable, and never read or edit
-it directly; only exact `decide.py` control commands own that state. The legacy
-18-cell matrix remains reference material; its semantic dimensions are useful,
-but its mandatory module-reading ceremony is not part of this runtime.
+it directly; only exact `decide.py` control commands own that state.
 
 The active goal file keeps hooks active in delegated transcripts even when they
 do not repeat the original Skill invocation. Completion, impossibility, or an

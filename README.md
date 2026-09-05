@@ -32,7 +32,10 @@ The current controller connects those ideas end to end:
   live final re-verification, evidence receipts, and independent
   `met / not_met / impossible` completion decisions.
 - `kernel/decide.py` — `start`, `select`, `outcome`, `verify`, `block`, `cancel`,
-  `evaluate`, and `status` CLI.
+  `evaluate`, and `status` CLI. Machine-readable output is compact, and `status`
+  shows the last `SWITCH_AFTER` attempts plus a recorded count rather than the
+  whole history — that window is all path closure consults, so the display cost
+  stays flat as a session grows. `.dopa/goal.json` still records every attempt.
 - `kernel/gate_decide.py` — Claude PreToolUse gate. Exact control commands are
   exempt; unknown shell commands are mutations; authorization is locked and
   later mutations stale earlier evidence.
