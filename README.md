@@ -158,11 +158,12 @@ Register the stable absolute hook paths in `~/.claude/settings.json`:
 
 Activate only with `Dopa mode` or explicit `dopa-kernel` invocation.
 
-366 tests cover structure, deterministic mechanism behavior, every historical
-bypass case, and decision-equivalence across protocol changes:
+368 tests cover structure, publication hygiene, deterministic mechanism
+behavior, every historical bypass case, and decision-equivalence across
+protocol changes:
 
 ```sh
-sh kernel/tests/structure.sh                              # 52
+sh kernel/tests/structure.sh                              # 54
 cd kernel && python3 -m unittest discover -s tests        # 90
 python3 tests/replay_equivalence.py main                  # decision equivalence
 cd ../legacy && sh tests/structure.sh                     # 89

@@ -60,5 +60,28 @@ has "$ROOT/README.md" 'promoted into the kernel' "unadopted pacing is not presen
 has "$ROOT/README.md" 'Three of four results survived that filter' "adoption filter is stated"
 exists "$ROOT/legacy/README.md" "legacy preserved for reference"
 
+# ---- publication hygiene ----
+# legacy/tests/structure.sh guards the v0.1 tree only. This repository is
+# public, so the live tree needs the same check: no personal machine paths and
+# no credentials in anything shipped.
+# --exclude is required: this file spells the pattern out, so without it the
+# check matches itself and fails forever.
+if grep -RIlE --exclude=structure.sh \
+  '/Users/|/home/[a-z]|\.claude/evaluations|auth\.env|OAuth|api[_-]?key *=|BEGIN [A-Z ]*PRIVATE KEY' \
+  "$ROOT/SKILL.md" "$ROOT/README.md" "$ROOT/reference" "$ROOT/kernel" "$ROOT/adapters" \
+  >/dev/null 2>&1; then
+  fail "live tree contains no private paths or credentials"
+else
+  pass "live tree contains no private paths or credentials"
+fi
+
+# .dopa/goal.json holds the user's real objectives, notes and attempt history.
+# It must never be committable.
+if grep -qF '.dopa/' "$ROOT/.gitignore" 2>/dev/null; then
+  pass "controller state is gitignored"
+else
+  fail "controller state is gitignored"
+fi
+
 printf '\n%d passed; %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
