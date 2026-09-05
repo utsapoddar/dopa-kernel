@@ -13,6 +13,65 @@ The name comes from dopamine as prediction error: behavior should change from
 the gap between `expect` and `got`, not from the model's confidence that it is
 probably finished.
 
+## Research grounding
+
+The controller's odder-looking commitments — no single score, regressions in
+their own channel, importance fixed before the work starts — are not style
+preferences. Each was adopted from a specific finding about how the dopamine
+system actually encodes prediction error.
+
+**Never sum `r` and `i`.** Dabney et al. (2020, *Nature* 577:671-675) recorded
+40 VTA cells across 6 animals and found dopamine encodes reward prediction
+error *distributionally*: each cell carries its own asymmetric scaling for
+positive versus negative RPE, mean ratio 0.48, with significant diversity
+(`F(38,234) = 2.93`, `p = 4e-7`). For one identical 5 uL reward, 13/40 cells
+fired above baseline while 10/40 fired below — same reward, opposite sign,
+simultaneously. A scalar would discard exactly the structure the separate axes
+preserve, so no exchange rate between progress and information exists and none
+may be invented. Live in `policy.choose`, which is a partial order rather than
+a score.
+
+**A regression is not negative progress.** Bayer & Glimcher (2005, *Neuron*
+47:129-141) found firing rate encodes positive RPE but does not carry the
+negative magnitude; Bayer, Lau & Glimcher (2007) located that magnitude in the
+duration of the post-reward interspike pause instead. Two encodings, two units,
+no signed scalar — which is why a regression gets its own channel and is never
+netted against progress. Live as `known_regression`, which forces restoration
+before other work proceeds.
+
+**Stakes are set at the cue, not the outcome.** Tobler, Fiorillo & Schultz
+(2005, *Science* 307:1642-1645) found dopamine neurons do not encode absolute
+reward magnitude: responses shift relative to expected value and the gain
+adapts to the variance of reward value, so an identical reward produces a
+different response under a different stakes context. Critically the adaptation
+is driven by reward-predicting stimuli — the scale is set before the outcome
+arrives. That is why `imp` is declared with the goal contract, frozen into the
+goal identity at `start`, and floors the evidence bar afterwards; it is never
+inferred once results are in.
+
+**Pacing has a closed form — and it was cut.** Niv, Daw, Joel & Dayan (2007,
+*Psychopharmacology* 191:507-520) model an agent choosing both an action and a
+latency `tau`, paying a vigor cost `C_v / tau` against the opportunity cost of
+time `Rbar * tau`. Their Eq. 4 gives `tau* = sqrt(C_v / Rbar)`: optimal latency
+depends only on the vigor constant and the average reward rate, identically for
+every action, which is why one tonic level retunes the pace of everything at
+once. This is **not** part of the current kernel. It governed pace and never
+quality, no gate ever read it, and its derivation assumes a free-operant
+setting whose scarce resource is seconds rather than context and turns. It
+survives as `legacy/runtime/pacing.py` and is documented for the record, not
+for use.
+
+Full derivations, the policy table, and the classification frame are in
+[`legacy/reference/quantities.md`](legacy/reference/quantities.md) and
+[`legacy/reference/matrix.md`](legacy/reference/matrix.md). They sit under
+`legacy/` because the routed architecture around them was retired, not because
+the findings were — three of the four commitments above are load-bearing in
+`kernel/` today.
+
+These results justify the controller's design commitments. They say nothing
+about whether DopaKernel improves agent success rates; see the evidence
+boundary below.
+
 ## What changed
 
 The original lean kernel had two sound ideas: do not let prose choose the path,

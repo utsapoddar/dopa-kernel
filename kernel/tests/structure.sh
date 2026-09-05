@@ -52,6 +52,12 @@ has "$ROOT/adapters/claude/SKILL.md" '../../SKILL.md' "adapter routes to canonic
 has "$ROOT/README.md" '"matcher": "*"' "Claude hook covers every tool name"
 has "$ROOT/README.md" 'cooperative but fallible' "semantic threat model is explicit"
 has "$ROOT/README.md" 'Host sandbox and permissions own execution authority' "platform owns execution security"
+has "$ROOT/README.md" 'Dabney' "distributional RPE grounds the unsummed axes"
+has "$ROOT/README.md" 'Bayer' "separate negative encoding grounds the regression channel"
+has "$ROOT/README.md" 'Tobler' "cue-set gain grounds declared importance"
+has "$ROOT/README.md" 'Niv' "pacing derivation is recorded even though it was cut"
+has "$ROOT/README.md" '**not** part of the current kernel' "cut pacing is not presented as live"
+has "$ROOT/README.md" 'about whether DopaKernel improves agent success rates' "grounding is not an effectiveness claim"
 exists "$ROOT/legacy/README.md" "legacy preserved for reference"
 
 printf '\n%d passed; %d failed\n' "$PASS" "$FAIL"
