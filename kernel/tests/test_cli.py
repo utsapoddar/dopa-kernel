@@ -7,6 +7,8 @@ from pathlib import Path
 
 K = Path(__file__).resolve().parents[1]
 CLI = K / "decide.py"
+sys.path.insert(0, str(K))
+import policy  # noqa: E402
 
 
 def goal():
@@ -51,7 +53,7 @@ class CLITest(unittest.TestCase):
         (self.root / "artifact.txt").write_text("done\n")
         receipt = self.run_cli("verify", "artifact")
         self.assertEqual(receipt.returncode, 0, receipt.stderr)
-        self.assertIn('"passed": true', receipt.stdout)
+        self.assertIs(json.loads(receipt.stdout)["passed"], True)
 
         after = self.run_cli("evaluate")
         self.assertEqual(after.returncode, 0, after.stderr)
@@ -66,6 +68,29 @@ class CLITest(unittest.TestCase):
         status = json.loads(result.stdout)
         self.assertEqual(status["objective"], "Create the artifact")
         self.assertEqual(status["mutation_generation"], 0)
+
+    def test_status_shows_the_decision_window_and_retains_full_history(self):
+        self.run_cli("start", "goal.json")
+        for n in range(5):
+            path = dict(candidates()["candidates"][0], id=f"path-{n}")
+            (self.root / "c.json").write_text(json.dumps({"candidates": [path]}))
+            self.run_cli("select", "c.json")
+            (self.root / "o.json").write_text(json.dumps({
+                "delta": "as", "r": "advanced", "i": "decision-constraining",
+                "note": f"attempt {n}",
+            }))
+            self.run_cli("outcome", "o.json")
+
+        shown = json.loads(self.run_cli("status").stdout)
+        stored = json.loads((self.root / ".dopa/goal.json").read_text())
+
+        # Only the window policy actually consults is displayed...
+        self.assertEqual(len(shown["attempts"]), policy.SWITCH_AFTER)
+        self.assertEqual(shown["attempts"][-1]["note"], "attempt 4")
+        self.assertEqual(shown["attempts_recorded"], 5)
+        # ...while the controller keeps every attempt on disk.
+        self.assertEqual(len(stored["attempts"]), 5)
+        self.assertEqual(stored["attempts"][0]["note"], "attempt 0")
 
     def test_unknown_requirement_verifier_is_refused(self):
         self.run_cli("start", "goal.json")

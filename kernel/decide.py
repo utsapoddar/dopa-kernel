@@ -25,6 +25,15 @@ def _read_json(path: str):
     return json.loads(Path(path).read_text())
 
 
+def _emit(payload) -> None:
+    """Print machine-readable output without pretty-print padding.
+
+    Indentation costs context on every command an agent runs and carries no
+    information the reader does not already get from the structure.
+    """
+    print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+
 def cmd_start(path: str) -> int:
     state = model.start_goal(_read_json(path))
     print(f"started: {state['goal_id']} — {state['objective']}")
@@ -53,7 +62,7 @@ def cmd_outcome(path: str) -> int:
 
 def cmd_verify(requirement_id: str) -> int:
     receipt = evaluator.verify_requirement(None, requirement_id)
-    print(json.dumps(receipt, indent=2, sort_keys=True))
+    _emit(receipt)
     return 0 if receipt["passed"] else 1
 
 
@@ -71,25 +80,31 @@ def cmd_cancel(path: str) -> int:
 
 def cmd_evaluate() -> int:
     result = evaluator.evaluate_goal(None, finalize=True)
-    print(json.dumps(result, indent=2, sort_keys=True))
+    _emit(result)
     return {"met": 0, "not_met": 1, "impossible": 3}[result["verdict"]]
 
 
 def cmd_status() -> int:
     state = model.load_state()
     if not state:
-        print(json.dumps({"status": "none"}, indent=2))
+        _emit({"status": "none"})
         return 0
     result = evaluator.evaluate(state)
     view = {
         key: state.get(key) for key in (
             "goal_id", "objective", "imp", "status", "mutation_generation",
-            "selected_action", "closed_paths", "attempts", "requirements",
+            "selected_action", "closed_paths", "requirements",
             "known_regression", "terminal_blocker",
         )
     }
+    # Path closure reads only the last SWITCH_AFTER attempts (policy.py), so
+    # older entries inform no decision. They stay in .dopa/goal.json; showing
+    # them again on every status call is the single largest cost in a session.
+    attempts = state.get("attempts") or []
+    view["attempts"] = attempts[-policy.SWITCH_AFTER:]
+    view["attempts_recorded"] = len(attempts)
     view["evaluation"] = result
-    print(json.dumps(view, indent=2, sort_keys=True))
+    _emit(view)
     return 0
 
 
