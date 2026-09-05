@@ -1,4 +1,6 @@
-# DopaKernel
+<p align="center">
+  <img src="assets/dopakernel-logo.png" alt="DopaKernel" width="560">
+</p>
 
 DopaKernel is a semantic completion controller for agent work.
 It keeps the user's objective stable, allocates the next action from explicit
