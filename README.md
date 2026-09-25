@@ -2,14 +2,130 @@
   <img src="assets/dopakernel-logo.png" alt="DopaKernel" width="560">
 </p>
 
-DopaKernel is a semantic completion controller for agent work.
-It keeps the user's objective stable, allocates the next action from explicit
-progress and information state, and refuses completion until every requirement
-has fresh structured evidence — a verdict produced by re-running frozen
-verifiers, never by the model's own account of what it did.
+DopaKernel stops AI coding agents from declaring a task done before it is.
+It freezes the user's objective into explicit requirements, picks the next
+action from recorded progress rather than the model's judgment, and refuses
+completion until every requirement has fresh evidence from re-running its
+verifier. The model's own account of what it did never counts as evidence.
 
 Behavior changes from the gap between `expect` and `got`, never from the
 model's confidence that it is probably finished.
+
+**Proof:** the current kernel passes 90 unit tests and 54 structural checks,
+and a replay harness asserts that protocol changes leave its decisions
+unchanged. See [Tests](#tests).
+
+## Minimal workflow
+
+Use absolute paths to the controller while keeping the target workspace as cwd:
+
+```sh
+python3 /path/to/dopa-kernel/kernel/decide.py start /tmp/dopa-goal.json
+python3 /path/to/dopa-kernel/kernel/decide.py select /tmp/dopa-candidates.json
+# make one authorized mutation, observe it
+python3 /path/to/dopa-kernel/kernel/decide.py outcome /tmp/dopa-outcome.json
+python3 /path/to/dopa-kernel/kernel/decide.py verify requirement-id
+python3 /path/to/dopa-kernel/kernel/decide.py evaluate
+```
+
+If the user explicitly changes the objective, run
+`decide.py cancel /tmp/dopa-cancel.json` before starting its replacement. See
+the contract guide for the authorized cancellation and evidence-backed blocker
+schemas. With the Claude hooks installed, both `cancel` and `block` force a
+native permission prompt, including in auto mode.
+
+See [`reference/goal-contract.md`](reference/goal-contract.md) for both schemas
+and the exact evidence semantics.
+
+## Install for Claude Code
+
+Keep one source of truth. Clone or place this repository at a stable path, then
+link its loader adapter. Do not link the repository root: recursive skill
+discovery may otherwise expose `legacy/SKILL.md` as a duplicate active skill.
+
+```sh
+ln -s /absolute/path/to/dopa-kernel/adapters/claude ~/.claude/skills/dopa-kernel
+```
+
+The adapter routes the agent to the canonical root `SKILL.md`; it contains no
+independent behavioral copy.
+
+Register the stable absolute hook paths in `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "*",
+      "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_decide.py"}]
+    }],
+    "Stop": [{
+      "matcher": "*",
+      "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_tests.py"}]
+    }]
+  }
+}
+```
+
+Activate only with `Dopa mode` or explicit `dopa-kernel` invocation.
+
+## Tests
+
+The current kernel and the preserved v0.1 architecture are tested separately.
+The current kernel has 144 checks; the legacy suites add 224 more:
+
+```sh
+sh kernel/tests/structure.sh                              # current: 54 structural checks
+cd kernel && python3 -m unittest discover -s tests        # current: 90 unit tests
+python3 tests/replay_equivalence.py main                  # current: decision equivalence
+cd ../legacy && sh tests/structure.sh                     # legacy: 89 structural checks
+cd runtime && python3 -m unittest discover -s tests       # legacy: 135 unit tests
+```
+
+The tests cover structure, publication hygiene, deterministic mechanism
+behavior, every historical bypass case, and decision equivalence across
+protocol changes.
+
+`replay_equivalence.py` drives a baseline checkout and the working tree through
+identical command sequences and asserts identical exit codes and identical
+final controller state. It is what lets the protocol get cheaper without the
+kernel's decisions moving.
+
+## Evidence boundary and limits
+
+The threat model is a cooperative but fallible agent that may stop early,
+misread progress, or rely on stale evidence — not a deliberately malicious
+process running with the user's own access.
+
+- Host sandbox and permissions own execution authority; DopaKernel owns
+  semantic requirements, action selection, evidence freshness, and the
+  completion decision. Auto mode changes approval friction, not whether those
+  semantic requirements have been met.
+- The shell classifier fails safe by construction: unknown commands are treated
+  as mutations, shell substitution is never read-only, verifier commands run
+  through a read-only allowlist without `shell=True`, and controller errors
+  fail closed while a goal is active. Direct tool access to `.dopa` is blocked.
+  It is a conservative classifier, not a full shell interpreter.
+- PreToolUse is registered for every tool name, so MCP and future mutation
+  tools cannot bypass generation accounting, and an active workspace goal keeps
+  the gate live in delegated transcripts that never repeated the skill
+  invocation. Its authority ends at deliberate same-user modification of
+  controller state, hooks, or settings, and at processes outside the installed
+  hooks: this is agent control, not an operating-system sandbox.
+- Candidate semantics and evidence-level labels originate in the goal contract;
+  deterministic code validates and applies them. At high stakes, make verifier
+  independence concrete and user-visible.
+- The Claude PreToolUse hook uses the platform's `permissionDecision: "ask"`
+  for cancellation and impossibility. Direct CLI invocation is an operator
+  interface and assumes the caller already has user authorization.
+- An earlier README reported `4/5` from a small replay. That was development
+  evidence rather than an effectiveness result, and it was withdrawn.
+- The standing claim is mechanical: the controller blocks the tested semantic
+  premature-completion cases under this threat model. Behavioral effectiveness
+  on unburned tasks is a separate question and wants its own preregistered
+  evaluation.
+
+## Research grounding
 
 Its core allocation rules are derived from primary-literature results on how the
 dopamine system actually encodes prediction error. "Dopamine-inspired" normally
@@ -19,8 +135,6 @@ separate regression channel instead of a signed sum, and a stakes level frozen
 before the work begins. Four findings from *Nature*, *Science*, *Neuron* and
 *Psychopharmacology*, each mapped to a named line of the controller — three
 adopted, one deliberately rejected.
-
-## Research grounding
 
 **The mapping from paper to function is verifiable:** That is what makes the name honest rather than decorative.
 
@@ -75,28 +189,6 @@ Full derivations, the policy table, and the classification frame are in
 [`legacy/reference/quantities.md`](legacy/reference/quantities.md) and
 [`legacy/reference/matrix.md`](legacy/reference/matrix.md).
 
-## Minimal workflow
-
-Use absolute paths to the controller while keeping the target workspace as cwd:
-
-```sh
-python3 /path/to/dopa-kernel/kernel/decide.py start /tmp/dopa-goal.json
-python3 /path/to/dopa-kernel/kernel/decide.py select /tmp/dopa-candidates.json
-# make one authorized mutation, observe it
-python3 /path/to/dopa-kernel/kernel/decide.py outcome /tmp/dopa-outcome.json
-python3 /path/to/dopa-kernel/kernel/decide.py verify requirement-id
-python3 /path/to/dopa-kernel/kernel/decide.py evaluate
-```
-
-If the user explicitly changes the objective, run
-`decide.py cancel /tmp/dopa-cancel.json` before starting its replacement. See
-the contract guide for the authorized cancellation and evidence-backed blocker
-schemas. With the Claude hooks installed, both `cancel` and `block` force a
-native permission prompt, including in auto mode.
-
-See [`reference/goal-contract.md`](reference/goal-contract.md) for both schemas
-and the exact evidence semantics.
-
 ## How this composes with `/goal`
 
 `/goal` and DopaKernel solve different layers of the same failure mode:
@@ -126,89 +218,6 @@ Current primary references:
   [v0.147.0 continuation contract](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/ext/goal/templates/goals/continuation.md)
 - [Codex v0.147.0 goal tool contract](https://github.com/openai/codex/blob/rust-v0.147.0/codex-rs/ext/goal/src/spec.rs)
 - [Claude Code `/goal` documentation](https://code.claude.com/docs/en/goal)
-
-## Install for Claude Code
-
-Keep one source of truth. Clone or place this repository at a stable path, then
-link its loader adapter. Do not link the repository root: recursive skill
-discovery may otherwise expose `legacy/SKILL.md` as a duplicate active skill.
-
-```sh
-ln -s /absolute/path/to/dopa-kernel/adapters/claude ~/.claude/skills/dopa-kernel
-```
-
-The adapter routes the agent to the canonical root `SKILL.md`; it contains no
-independent behavioral copy.
-
-Register the stable absolute hook paths in `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [{
-      "matcher": "*",
-      "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_decide.py"}]
-    }],
-    "Stop": [{
-      "matcher": "*",
-      "hooks": [{"type": "command", "command": "python3 /absolute/path/to/dopa-kernel/kernel/gate_tests.py"}]
-    }]
-  }
-}
-```
-
-Activate only with `Dopa mode` or explicit `dopa-kernel` invocation.
-
-368 tests cover structure, publication hygiene, deterministic mechanism
-behavior, every historical bypass case, and decision-equivalence across
-protocol changes:
-
-```sh
-sh kernel/tests/structure.sh                              # 54
-cd kernel && python3 -m unittest discover -s tests        # 90
-python3 tests/replay_equivalence.py main                  # decision equivalence
-cd ../legacy && sh tests/structure.sh                     # 89
-cd runtime && python3 -m unittest discover -s tests       # 135
-```
-
-`replay_equivalence.py` drives a baseline checkout and the working tree through
-identical command sequences and asserts identical exit codes and identical
-final controller state. It is what lets the protocol get cheaper without the
-kernel's decisions moving.
-
-## Evidence boundary and limits
-
-The threat model is a cooperative but fallible agent that may stop early,
-misread progress, or rely on stale evidence — not a deliberately malicious
-process running with the user's own access.
-
-- Host sandbox and permissions own execution authority; DopaKernel owns
-  semantic requirements, action selection, evidence freshness, and the
-  completion decision. Auto mode changes approval friction, not whether those
-  semantic requirements have been met.
-- The shell classifier fails safe by construction: unknown commands are treated
-  as mutations, shell substitution is never read-only, verifier commands run
-  through a read-only allowlist without `shell=True`, and controller errors
-  fail closed while a goal is active. Direct tool access to `.dopa` is blocked.
-  It is a conservative classifier, not a full shell interpreter.
-- PreToolUse is registered for every tool name, so MCP and future mutation
-  tools cannot bypass generation accounting, and an active workspace goal keeps
-  the gate live in delegated transcripts that never repeated the skill
-  invocation. Its authority ends at deliberate same-user modification of
-  controller state, hooks, or settings, and at processes outside the installed
-  hooks: this is agent control, not an operating-system sandbox.
-- Candidate semantics and evidence-level labels originate in the goal contract;
-  deterministic code validates and applies them. At high stakes, make verifier
-  independence concrete and user-visible.
-- The Claude PreToolUse hook uses the platform's `permissionDecision: "ask"`
-  for cancellation and impossibility. Direct CLI invocation is an operator
-  interface and assumes the caller already has user authorization.
-- An earlier README reported `4/5` from a small replay. That was development
-  evidence rather than an effectiveness result, and it was withdrawn.
-- The standing claim is mechanical: the controller blocks the tested semantic
-  premature-completion cases under this threat model. Behavioral effectiveness
-  on unburned tasks is a separate question and wants its own preregistered
-  evaluation.
 
 ## Version log
 
