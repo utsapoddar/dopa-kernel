@@ -19,7 +19,9 @@ unchanged. See [Tests](#tests).
 
 [![DopaKernel architecture diagram](docs/media/architecture.png)](docs/media/architecture.png)
 
-**[Watch the one-minute project explainer →](docs/media/explainer.mp4)**
+### Video walkthrough
+
+https://github.com/user-attachments/assets/289c764e-5888-4079-abc0-4dbf0fe3154d
 
 ## Minimal workflow
 
