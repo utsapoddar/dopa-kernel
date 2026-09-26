@@ -15,6 +15,12 @@ model's confidence that it is probably finished.
 and a replay harness asserts that protocol changes leave its decisions
 unchanged. See [Tests](#tests).
 
+## Architecture and walkthrough
+
+[![DopaKernel architecture diagram](docs/media/architecture.png)](docs/media/architecture.png)
+
+**[Watch the one-minute project explainer →](docs/media/explainer.mp4)**
+
 ## Minimal workflow
 
 Use absolute paths to the controller while keeping the target workspace as cwd:
